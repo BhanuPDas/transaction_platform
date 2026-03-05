@@ -1,0 +1,137 @@
+name: simple50
+
+topology:
+  nodes:
+    switch_a:
+      kind: ovs-bridge
+    switch_b:
+      kind: ovs-bridge
+    switch_c:
+      kind: ovs-bridge
+    switch_d:
+      kind: ovs-bridge
+    switch_e:
+      kind: ovs-bridge
+
+    R1:
+      kind: linux
+      image: frrouting/frr:v7.5.1
+      binds:
+        - daemons:/etc/frr/daemons
+        - r1.conf:/etc/frr/frr.conf
+
+    R2:
+      kind: linux
+      image: frrouting/frr:v7.5.1
+      binds:
+        - daemons:/etc/frr/daemons
+        - r2.conf:/etc/frr/frr.conf
+
+    C1: {kind: linux, image: alpine:latest}
+    C2: {kind: linux, image: alpine:latest}
+    C3: {kind: linux, image: alpine:latest}
+    C4: {kind: linux, image: alpine:latest}
+    C5: {kind: linux, image: alpine:latest}
+    C6: {kind: linux, image: alpine:latest}
+    C7: {kind: linux, image: alpine:latest}
+    C8: {kind: linux, image: alpine:latest}
+    C9: {kind: linux, image: alpine:latest}
+    C10: {kind: linux, image: alpine:latest}
+    C11: {kind: linux, image: alpine:latest}
+    C12: {kind: linux, image: alpine:latest}
+    C13: {kind: linux, image: alpine:latest}
+    C14: {kind: linux, image: alpine:latest}
+    C15: {kind: linux, image: alpine:latest}
+    C16: {kind: linux, image: alpine:latest}
+    C17: {kind: linux, image: alpine:latest}
+    C18: {kind: linux, image: alpine:latest}
+    C19: {kind: linux, image: alpine:latest}
+    C20: {kind: linux, image: alpine:latest}
+    C21: {kind: linux, image: alpine:latest}
+    C22: {kind: linux, image: alpine:latest}
+    C23: {kind: linux, image: alpine:latest}
+    C24: {kind: linux, image: alpine:latest}
+    C25: {kind: linux, image: alpine:latest}
+    C26: {kind: linux, image: alpine:latest}
+    C27: {kind: linux, image: alpine:latest}
+    C28: {kind: linux, image: alpine:latest}
+    C29: {kind: linux, image: alpine:latest}
+    C30: {kind: linux, image: alpine:latest}
+    C31: {kind: linux, image: alpine:latest}
+    C32: {kind: linux, image: alpine:latest}
+    C33: {kind: linux, image: alpine:latest}
+    C34: {kind: linux, image: alpine:latest}
+    C35: {kind: linux, image: alpine:latest}
+    C36: {kind: linux, image: alpine:latest}
+    C37: {kind: linux, image: alpine:latest}
+    C38: {kind: linux, image: alpine:latest}
+    C39: {kind: linux, image: alpine:latest}
+    C40: {kind: linux, image: alpine:latest}
+    C41: {kind: linux, image: alpine:latest}
+    C42: {kind: linux, image: alpine:latest}
+    C43: {kind: linux, image: alpine:latest}
+    C44: {kind: linux, image: alpine:latest}
+    C45: {kind: linux, image: alpine:latest}
+    C46: {kind: linux, image: alpine:latest}
+    C47: {kind: linux, image: alpine:latest}
+    C48: {kind: linux, image: alpine:latest}
+    C49: {kind: linux, image: alpine:latest}
+    C50: {kind: linux, image: alpine:latest}
+
+  links:
+    - endpoints: ["R1:eth1", "R2:eth1"]
+    - endpoints: ["R1:eth2", "switch_a:eth100"]
+    - endpoints: ["R1:eth3", "switch_b:eth200"]
+    - endpoints: ["R2:eth2", "switch_c:eth300"]
+    - endpoints: ["R2:eth3", "switch_d:eth400"]
+    - endpoints: ["R2:eth4", "switch_e:eth500"]
+    - endpoints: ["switch_a:eth1", "C1:eth1"]
+    - endpoints: ["switch_a:eth2", "C2:eth1"]
+    - endpoints: ["switch_a:eth3", "C3:eth1"]
+    - endpoints: ["switch_a:eth4", "C4:eth1"]
+    - endpoints: ["switch_a:eth5", "C5:eth1"]
+    - endpoints: ["switch_a:eth6", "C6:eth1"]
+    - endpoints: ["switch_a:eth7", "C7:eth1"]
+    - endpoints: ["switch_a:eth8", "C8:eth1"]
+    - endpoints: ["switch_a:eth9", "C9:eth1"]
+    - endpoints: ["switch_a:eth10", "C10:eth1"]
+    - endpoints: ["switch_b:eth11", "C11:eth1"]
+    - endpoints: ["switch_b:eth12", "C12:eth1"]
+    - endpoints: ["switch_b:eth13", "C13:eth1"]
+    - endpoints: ["switch_b:eth14", "C14:eth1"]
+    - endpoints: ["switch_b:eth15", "C15:eth1"]
+    - endpoints: ["switch_b:eth16", "C16:eth1"]
+    - endpoints: ["switch_b:eth17", "C17:eth1"]
+    - endpoints: ["switch_b:eth18", "C18:eth1"]
+    - endpoints: ["switch_b:eth19", "C19:eth1"]
+    - endpoints: ["switch_b:eth20", "C20:eth1"]
+    - endpoints: ["switch_c:eth21", "C21:eth1"]
+    - endpoints: ["switch_c:eth22", "C22:eth1"]
+    - endpoints: ["switch_c:eth23", "C23:eth1"]
+    - endpoints: ["switch_c:eth24", "C24:eth1"]
+    - endpoints: ["switch_c:eth25", "C25:eth1"]
+    - endpoints: ["switch_c:eth26", "C26:eth1"]
+    - endpoints: ["switch_c:eth27", "C27:eth1"]
+    - endpoints: ["switch_c:eth28", "C28:eth1"]
+    - endpoints: ["switch_c:eth29", "C29:eth1"]
+    - endpoints: ["switch_c:eth30", "C30:eth1"]
+    - endpoints: ["switch_d:eth31", "C31:eth1"]
+    - endpoints: ["switch_d:eth32", "C32:eth1"]
+    - endpoints: ["switch_d:eth33", "C33:eth1"]
+    - endpoints: ["switch_d:eth34", "C34:eth1"]
+    - endpoints: ["switch_d:eth35", "C35:eth1"]
+    - endpoints: ["switch_d:eth36", "C36:eth1"]
+    - endpoints: ["switch_d:eth37", "C37:eth1"]
+    - endpoints: ["switch_d:eth38", "C38:eth1"]
+    - endpoints: ["switch_d:eth39", "C39:eth1"]
+    - endpoints: ["switch_d:eth40", "C40:eth1"]
+    - endpoints: ["switch_e:eth41", "C41:eth1"]
+    - endpoints: ["switch_e:eth42", "C42:eth1"]
+    - endpoints: ["switch_e:eth43", "C43:eth1"]
+    - endpoints: ["switch_e:eth44", "C44:eth1"]
+    - endpoints: ["switch_e:eth45", "C45:eth1"]
+    - endpoints: ["switch_e:eth46", "C46:eth1"]
+    - endpoints: ["switch_e:eth47", "C47:eth1"]
+    - endpoints: ["switch_e:eth48", "C48:eth1"]
+    - endpoints: ["switch_e:eth49", "C49:eth1"]
+    - endpoints: ["switch_e:eth50", "C50:eth1"]

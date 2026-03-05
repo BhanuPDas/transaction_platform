@@ -1,0 +1,80 @@
+#!/bin/bash
+
+echo "=========================================="
+echo "Deploying 50-node topology with 2 routers"
+echo "=========================================="
+
+echo "[1/4] Deploying containers..."
+sudo clab deploy -t simple-50node.yml
+
+echo ""
+echo "[2/4] Waiting for containers..."
+sleep 15
+
+echo ""
+echo "[3/4] Configuring client IPs and routes..."
+
+# Switch A: C1-10 (10.1.0.x)
+for i in {1..10}; do
+  docker exec clab-simple50-C${i} ip addr add 10.1.0.${i}/24 dev eth1 2>/dev/null || true
+  docker exec clab-simple50-C${i} ip link set eth1 up
+  docker exec clab-simple50-C${i} ip route add 10.0.0.0/8 via 10.1.0.254 dev eth1 2>/dev/null || true
+done
+
+# Switch B: C11-20 (10.2.0.x)
+for i in {11..20}; do
+  j=$((i-10))
+  docker exec clab-simple50-C${i} ip addr add 10.2.0.${j}/24 dev eth1 2>/dev/null || true
+  docker exec clab-simple50-C${i} ip link set eth1 up
+  docker exec clab-simple50-C${i} ip route add 10.0.0.0/8 via 10.2.0.254 dev eth1 2>/dev/null || true
+done
+
+# Switch C: C21-30 (10.3.0.x)
+for i in {21..30}; do
+  j=$((i-20))
+  docker exec clab-simple50-C${i} ip addr add 10.3.0.${j}/24 dev eth1 2>/dev/null || true
+  docker exec clab-simple50-C${i} ip link set eth1 up
+  docker exec clab-simple50-C${i} ip route add 10.0.0.0/8 via 10.3.0.254 dev eth1 2>/dev/null || true
+done
+
+# Switch D: C31-40 (10.4.0.x)
+for i in {31..40}; do
+  j=$((i-30))
+  docker exec clab-simple50-C${i} ip addr add 10.4.0.${j}/24 dev eth1 2>/dev/null || true
+  docker exec clab-simple50-C${i} ip link set eth1 up
+  docker exec clab-simple50-C${i} ip route add 10.0.0.0/8 via 10.4.0.254 dev eth1 2>/dev/null || true
+done
+
+# Switch E: C41-50 (10.5.0.x)
+for i in {41..50}; do
+  j=$((i-40))
+  docker exec clab-simple50-C${i} ip addr add 10.5.0.${j}/24 dev eth1 2>/dev/null || true
+  docker exec clab-simple50-C${i} ip link set eth1 up
+  docker exec clab-simple50-C${i} ip route add 10.0.0.0/8 via 10.5.0.254 dev eth1 2>/dev/null || true
+done
+
+echo ""
+echo "[4/4] Starting FRR on routers..."
+docker exec clab-simple50-R1 sysctl -w net.ipv4.ip_forward=1
+docker exec clab-simple50-R2 sysctl -w net.ipv4.ip_forward=1
+docker exec clab-simple50-R1 /usr/lib/frr/frrinit.sh start
+docker exec clab-simple50-R2 /usr/lib/frr/frrinit.sh start
+
+sleep 10
+
+echo ""
+echo "Done!"
+echo ""
+echo "Network Summary:"
+echo "  - 2 Routers (R1 ↔ R2) with OSPF"
+echo "  - 5 OVS Switches"
+echo "  - 50 Alpine clients"
+echo ""
+echo "IP Ranges:"
+echo "  Switch A: C1-10   → 10.1.0.1-10"
+echo "  Switch B: C11-20  → 10.2.0.1-10"
+echo "  Switch C: C21-30  → 10.3.0.1-10"
+echo "  Switch D: C31-40  → 10.4.0.1-10"
+echo "  Switch E: C41-50  → 10.5.0.1-10"
+echo ""
+

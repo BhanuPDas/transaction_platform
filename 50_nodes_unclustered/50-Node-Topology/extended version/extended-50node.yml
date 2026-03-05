@@ -1,0 +1,4748 @@
+name: century
+
+topology:
+  nodes:
+    switch_a:
+      kind: ovs-bridge
+    switch_b:
+      kind: ovs-bridge
+    switch_c:
+      kind: ovs-bridge
+    switch_d:
+      kind: ovs-bridge
+    switch_e:
+      kind: ovs-bridge
+
+    R1:
+      kind: linux
+      image: frrouting/frr:v7.5.1
+      binds:
+        - daemons:/etc/frr/daemons
+        - r1.conf:/etc/frr/frr.conf
+
+    R2:
+      kind: linux
+      image: frrouting/frr:v7.5.1
+      binds:
+        - daemons:/etc/frr/daemons
+        - r2.conf:/etc/frr/frr.conf
+
+    serf1:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            # Disable PSI reporting to avoid issues with cgroup enforcement
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            # Wait for eth1 to appear
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            # Set up network
+            ip link set eth1 up
+            # ip addr add 10.1.0.1/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            # Small randomized delay
+            sleep $((RANDOM % 10 + 5))
+
+            # Start K3s (with cgroup enforcement disabled)
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf1 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.1.0.1 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+            
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml   
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+            
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+    serf2:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.1.0.2/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf2 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.1.0.2 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+    serf3:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.1.0.3/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf3 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.1.0.3 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+    serf4:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.1.0.4/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf4 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.1.0.4 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf5:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.1.0.5/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf5 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.1.0.5 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf6:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.1.0.6/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf6 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.1.0.6 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf7:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.1.0.7/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf7 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.1.0.7 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf8:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.1.0.8/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf8 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.1.0.8 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf9:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.1.0.9/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf9 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.1.0.9 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf10:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.1.0.10/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf10 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.1.0.10 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf11:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.2.0.1/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf11 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.2.0.1 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf12:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.2.0.2/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf12 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.2.0.2 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf13:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.2.0.3/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf13 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.2.0.3 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf14:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.2.0.4/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf14 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.2.0.4 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf15:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.2.0.5/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf15 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.2.0.5 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf16:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.2.0.6/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf16 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.2.0.6 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf17:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.2.0.7/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf17 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.2.0.7 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf18:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.2.0.8/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf18 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.2.0.8 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf19:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.2.0.9/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf19 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.2.0.9 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf20:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.2.0.10/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf20 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.2.0.10 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf21:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.3.0.1/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf21 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.3.0.1 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf22:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.3.0.2/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf22 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.3.0.2 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf23:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.3.0.3/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf23 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.3.0.3 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf24:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.3.0.4/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf24 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.3.0.4 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf25:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.3.0.5/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf25 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.3.0.5 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf26:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.3.0.6/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf26 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.3.0.6 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf27:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.3.0.7/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf27 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.3.0.7 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf28:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.3.0.8/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf28 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.3.0.8 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf29:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.3.0.9/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf29 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.3.0.9 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf30:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.3.0.10/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf30 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.3.0.10 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf31:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.4.0.1/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf31 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.4.0.1 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf32:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.4.0.2/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf32 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.4.0.2 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf33:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.4.0.3/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf33 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.4.0.3 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf34:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.4.0.4/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf34 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.4.0.4 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf35:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.4.0.5/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf35 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.4.0.5 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf36:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.4.0.6/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf36 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.4.0.6 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf37:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.4.0.7/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf37 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.4.0.7 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf38:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.4.0.8/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf38 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.4.0.8 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf39:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.4.0.9/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf39 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.4.0.9 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf40:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.4.0.10/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf40 \
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.4.0.10 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf41:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.5.0.1/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf41\
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.5.0.1 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf42:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.5.0.2/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf42\
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.5.0.2 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf43:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.5.0.3/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf43\
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.5.0.3 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf44:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.5.0.4/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf44\
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.5.0.4 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf45:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.5.0.5/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf45\
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.5.0.5 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf46:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.5.0.6/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf46\
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.5.0.6 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf47:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.5.0.7/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf47\
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.5.0.7 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf48:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.5.0.8/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf48\
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.5.0.8 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf49:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.5.0.9/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf49\
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.5.0.9 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+    serf50:
+      kind: linux
+      image: abdullahmuzlim279/k3s-serf-node:warmcache-test
+      env:
+        CLAB_LINUX_PRIVILEGED: "true"
+      binds:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+        - /lib/modules:/lib/modules:ro
+        - /dev:/dev
+      cmd: >
+          bash -c '
+            set -e
+            echo "[INIT] Preparing system..."
+            ulimit -n 65536
+            sysctl -w fs.inotify.max_user_instances=4096
+            sysctl -w fs.inotify.max_user_watches=524288
+            sysctl -w fs.file-max=2097152
+
+            echo 0 > /sys/fs/cgroup/cpu.pressure || true
+            echo 0 > /sys/fs/cgroup/memory.pressure || true
+
+            echo "[NET] Waiting for eth1 to be created..."
+            until ip link show eth1 >/dev/null 2>&1; do
+                sleep 1
+            done
+            echo "[NET] eth1 detected."
+
+            ip link set eth1 up
+            # ip addr add 10.5.0.10/24 dev eth1
+            ip link set eth1 mtu 1400
+
+            sleep $((RANDOM % 10 + 5))
+
+            echo "[INIT] Launching optimized K3s server with relaxed cgroups..."
+            k3s server \
+              --node-name serf50\
+              --disable traefik \
+              --disable servicelb \
+              --disable local-storage \
+              --disable metrics-server \
+              --disable-cloud-controller \
+              --disable-network-policy \
+              --disable-helm-controller \
+              --snapshotter native \
+              --tls-san 10.5.0.10 \
+              --kubelet-arg=cgroup-root=/ \
+              --kubelet-arg=cgroups-per-qos=false \
+              --kubelet-arg=enforce-node-allocatable= \
+              --v=0 &
+
+            sleep 20
+            chmod 666 /etc/rancher/k3s/k3s.yaml
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "[INIT] Waiting for containerd to be ready..."
+            until /usr/local/bin/k3s ctr version >/dev/null 2>&1; do
+                echo "  containerd not yet ready, retrying..."
+                sleep 3
+            done
+            echo "Containerd is ready."
+
+            echo "[INIT] Importing cached images..."
+            for f in /opt/k3s-images/*.tar; do
+                echo "Loading $f ..."
+                /usr/local/bin/k3s ctr images import "$f" || true
+            done
+
+            k3s kubectl apply -f /tmp/qos-controller-daemonset.yaml
+            k3s kubectl apply -f /tmp/service-account.yaml
+            k3s kubectl apply -f /tmp/cluster-role.yaml
+            k3s kubectl apply -f /tmp/cluster-role-binding.yaml
+            k3s kubectl apply -f /tmp/deployment-scheduler.yaml
+            k3s kubectl apply -f /tmp/ram_price.yaml
+            k3s kubectl apply -f /tmp/storage_price.yaml
+            k3s kubectl apply -f /tmp/vcpu_price.yaml
+            k3s kubectl apply -f /tmp/vgpu_price.yaml
+
+            mkdir -p ~/.kube
+            cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+            chown $(whoami):$(whoami) ~/.kube/config
+            chmod 600 ~/.kube/config
+
+            echo "[READY] K3s cluster is up and running on $(hostname)."
+
+            while true; do
+                sync
+                echo 3 > /proc/sys/vm/drop_caches
+                sleep 100000
+            done &
+
+            sleep infinity
+          '
+
+  links:
+    - endpoints: ["R1:eth1", "R2:eth1"]
+    - endpoints: ["R1:eth2", "switch_a:eth100"]
+    - endpoints: ["R1:eth3", "switch_b:eth200"]
+    - endpoints: ["R2:eth2", "switch_c:eth300"]
+    - endpoints: ["R2:eth3", "switch_d:eth400"]
+    - endpoints: ["R2:eth4", "switch_e:eth500"]
+
+    # Switch A → serf1–serf10
+    - endpoints: ["switch_a:eth1", "serf1:eth1"]
+    - endpoints: ["switch_a:eth2", "serf2:eth1"]
+    - endpoints: ["switch_a:eth3", "serf3:eth1"]
+    - endpoints: ["switch_a:eth4", "serf4:eth1"]
+    - endpoints: ["switch_a:eth5", "serf5:eth1"]
+    - endpoints: ["switch_a:eth6", "serf6:eth1"]
+    - endpoints: ["switch_a:eth7", "serf7:eth1"]
+    - endpoints: ["switch_a:eth8", "serf8:eth1"]
+    - endpoints: ["switch_a:eth9", "serf9:eth1"]
+    - endpoints: ["switch_a:eth10", "serf10:eth1"]
+
+    # Switch B → serf11–serf20
+    - endpoints: ["switch_b:eth11", "serf11:eth1"]
+    - endpoints: ["switch_b:eth12", "serf12:eth1"]
+    - endpoints: ["switch_b:eth13", "serf13:eth1"]
+    - endpoints: ["switch_b:eth14", "serf14:eth1"]
+    - endpoints: ["switch_b:eth15", "serf15:eth1"]
+    - endpoints: ["switch_b:eth16", "serf16:eth1"]
+    - endpoints: ["switch_b:eth17", "serf17:eth1"]
+    - endpoints: ["switch_b:eth18", "serf18:eth1"]
+    - endpoints: ["switch_b:eth19", "serf19:eth1"]
+    - endpoints: ["switch_b:eth20", "serf20:eth1"]
+
+    # Switch C → serf21–serf30
+    - endpoints: ["switch_c:eth21", "serf21:eth1"]
+    - endpoints: ["switch_c:eth22", "serf22:eth1"]
+    - endpoints: ["switch_c:eth23", "serf23:eth1"]
+    - endpoints: ["switch_c:eth24", "serf24:eth1"]
+    - endpoints: ["switch_c:eth25", "serf25:eth1"]
+    - endpoints: ["switch_c:eth26", "serf26:eth1"]
+    - endpoints: ["switch_c:eth27", "serf27:eth1"]
+    - endpoints: ["switch_c:eth28", "serf28:eth1"]
+    - endpoints: ["switch_c:eth29", "serf29:eth1"]
+    - endpoints: ["switch_c:eth30", "serf30:eth1"]
+
+    # Switch D → serf31–serf40
+    - endpoints: ["switch_d:eth31", "serf31:eth1"]
+    - endpoints: ["switch_d:eth32", "serf32:eth1"]
+    - endpoints: ["switch_d:eth33", "serf33:eth1"]
+    - endpoints: ["switch_d:eth34", "serf34:eth1"]
+    - endpoints: ["switch_d:eth35", "serf35:eth1"]
+    - endpoints: ["switch_d:eth36", "serf36:eth1"]
+    - endpoints: ["switch_d:eth37", "serf37:eth1"]
+    - endpoints: ["switch_d:eth38", "serf38:eth1"]
+    - endpoints: ["switch_d:eth39", "serf39:eth1"]
+    - endpoints: ["switch_d:eth40", "serf40:eth1"]
+
+    # Switch E → serf41–serf50
+    - endpoints: ["switch_e:eth41", "serf41:eth1"]
+    - endpoints: ["switch_e:eth42", "serf42:eth1"]
+    - endpoints: ["switch_e:eth43", "serf43:eth1"]
+    - endpoints: ["switch_e:eth44", "serf44:eth1"]
+    - endpoints: ["switch_e:eth45", "serf45:eth1"]
+    - endpoints: ["switch_e:eth46", "serf46:eth1"]
+    - endpoints: ["switch_e:eth47", "serf47:eth1"]
+    - endpoints: ["switch_e:eth48", "serf48:eth1"]
+    - endpoints: ["switch_e:eth49", "serf49:eth1"]
+    - endpoints: ["switch_e:eth50", "serf50:eth1"]

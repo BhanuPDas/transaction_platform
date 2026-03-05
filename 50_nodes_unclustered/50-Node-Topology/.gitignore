@@ -1,0 +1,56 @@
+# -------------------------
+# Containerlab generated files
+# -------------------------
+clab-*/
+clab-*/**/*
+*.clab.yml
+topology-data.json
+authorized_keys
+*.inventory.yml
+*.ansible-inventory.yml
+*.nornir*
+
+# TLS and SSH artifacts
+.tls/
+*.pem
+*.key
+*.pub
+
+# Kubernetes kubeconfigs (if exported)
+kubeconfig
+kubeconfig.yaml
+kubeconfig.yml
+
+# Logs
+*.log
+*.out
+*.err
+
+# Python cache
+__pycache__/
+*.pyc
+
+# VS Code files
+.vscode/
+*.code-workspace
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Temporary shell outputs
+*.tmp
+*.bak
+
+# Script-generated artifacts
+*.pid
+*.pidfile
+
+# Image caches (if any)
+*.tar
+
+# Ignore binary executables
+*.exe
+*.bin
+*.o
+*.so
