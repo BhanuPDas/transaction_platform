@@ -3,7 +3,9 @@ package relayer
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"strings"
 	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
@@ -71,19 +73,23 @@ func (f *Forwarder) listen(ctx context.Context, ch <-chan ctypes.ResultEvent) {
 
 func (f *Forwarder) handleEvent(ctx context.Context, ev ctypes.ResultEvent) {
 	txBytes := ev.Data.(types.EventDataTx).Tx
-
-	hash := sha256.Sum256(txBytes)
+	rawTx := string(txBytes)
+	if strings.HasPrefix(rawTx, "\"") && strings.HasSuffix(rawTx, "\"") {
+		rawTx = rawTx[1 : len(rawTx)-1]
+	}
+	decodedTx, err := base64.StdEncoding.DecodeString(rawTx)
+	if err != nil {
+		f.logger.Error("failed to decode base64 tx", "error", err)
+		return
+	}
+	hash := sha256.Sum256(decodedTx)
 	hashStr := hex.EncodeToString(hash[:])
-
 	if f.dedup.Seen(hashStr) {
 		return
 	}
-
 	f.dedup.Add(hashStr)
-
 	ctxTimeout, cancel := context.WithTimeout(ctx, f.timeout)
 	defer cancel()
-
 	switch f.mode {
 	case "async":
 		_, err := f.target.BroadcastTxAsync(ctxTimeout, txBytes)
@@ -101,7 +107,6 @@ func (f *Forwarder) handleEvent(ctx context.Context, ev ctypes.ResultEvent) {
 			f.logger.Error("broadcast tx error", "error", err)
 		}
 	}
-
 	f.logger.Info("Relayed tx",
 		"direction", f.name,
 		"hash", hashStr,

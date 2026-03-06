@@ -2,29 +2,23 @@ package main
 
 import (
 	"context"
+	"github.com/cometbft/cometbft/libs/log"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
-
-	"github.com/cometbft/cometbft/libs/log"
 
 	"relayer/internal/relayer"
 )
 
 func main() {
 
-	cfg := relayer.Config{
-		ClusterAURL:    os.Getenv("CLUSTER_A"),
-		ClusterBURL:    os.Getenv("CLUSTER_B"),
-		Query:          "tm.event='Tx'",
-		BroadcastMode:  "async",
-		RequestTimeout: 5 * time.Second,
+	cfg, err := relayer.LoadConfig("config.yaml")
+	if err != nil {
+		panic(err)
 	}
-
 	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
 
-	r := relayer.NewRelayer(cfg, logger)
+	r := relayer.NewRelayer(*cfg, logger)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
