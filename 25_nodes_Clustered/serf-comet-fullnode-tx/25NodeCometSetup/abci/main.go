@@ -28,7 +28,12 @@ func main() {
 		}
 	}(db)
 
-	app := NewMyApp(db, logger)
+	cls, err := LoadConfig("config.yaml")
+	if err != nil {
+		logger.Error("failed to load config file", "err", err)
+		panic(err)
+	}
+	app := NewMyApp(db, logger, cls)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	rpcAddr := "0.0.0.0:7373"

@@ -17,14 +17,6 @@ import (
 	"strings"
 )
 
-const (
-	AppVersion          uint64 = 1
-	TransferType               = "transfer"
-	AddValidatorType           = "addval"
-	RemoveValidatorType        = "remval"
-	UpdateValidatorType        = "updval"
-)
-
 type TransferTransaction struct {
 	Type      string `json:"type"`
 	FromNode  string `json:"from_node"`
@@ -61,9 +53,10 @@ type MyApp struct {
 	valAddrToPubKeyMap         map[string]crypto.PubKey
 	updatedValidatorsThisBlock map[string]struct{}
 	logger                     log.Logger
+	cls                        []string
 }
 
-func NewMyApp(db *pebble.DB, logger log.Logger) *MyApp {
+func NewMyApp(db *pebble.DB, logger log.Logger, cluster *AppConfig) *MyApp {
 	app := &MyApp{
 		state: &State{
 			DB:        db,
@@ -73,13 +66,14 @@ func NewMyApp(db *pebble.DB, logger log.Logger) *MyApp {
 		valAddrToPubKeyMap:         make(map[string]crypto.PubKey),
 		logger:                     logger,
 		updatedValidatorsThisBlock: make(map[string]struct{}),
+		cls:                        cluster.ClusterName,
 	}
 	app.logger.Info(fmt.Sprintf("Loading Data from DB..."))
 	app.LoadFromDB()
 	return app
 }
 
-func (app *MyApp) Info(ctx context.Context, req *types.InfoRequest) (*types.InfoResponse, error) {
+func (app *MyApp) Info(_ context.Context, req *types.InfoRequest) (*types.InfoResponse, error) {
 	app.logger.Info(fmt.Sprintf("CometBFT Node connected. Version: %s, ABCIVersion: %s", req.Version, req.AbciVersion))
 	return &types.InfoResponse{
 		Version:          version.ABCIVersion,
@@ -89,15 +83,21 @@ func (app *MyApp) Info(ctx context.Context, req *types.InfoRequest) (*types.Info
 	}, nil
 }
 
-func (app *MyApp) InitChain(ctx context.Context, req *types.InitChainRequest) (*types.InitChainResponse, error) {
+func (app *MyApp) InitChain(_ context.Context, req *types.InitChainRequest) (*types.InitChainResponse, error) {
 	app.logger.Info(fmt.Sprintf("COMETBFT Initialization Start - INIT CHAIN"))
 	if len(app.state.Ledger) == 0 {
 		app.logger.Info(fmt.Sprintf("No existing balances found, initializing defaults for all nodes..."))
-		for i := 1; i <= 25; i++ {
-			key := fmt.Sprintf("serf%d", i)
-			app.state.Ledger[key] = 10000
+		if len(app.cls) > 0 && app.cls[0] == "clusterA" {
+			for i := 1; i <= 12; i++ {
+				key := fmt.Sprintf("serf%d", i)
+				app.state.Ledger[key] = 10000
+			}
+		} else if len(app.cls) > 1 && app.cls[1] == "clusterB" {
+			for i := 13; i <= 25; i++ {
+				key := fmt.Sprintf("serf%d", i)
+				app.state.Ledger[key] = 10000
+			}
 		}
-
 	} else {
 		app.logger.Info(fmt.Sprintf("Successfully restored balances from Pebble DB."))
 	}
@@ -118,7 +118,7 @@ func (app *MyApp) InitChain(ctx context.Context, req *types.InitChainRequest) (*
 	return &types.InitChainResponse{Validators: app.valUpdates, AppHash: app.state.Hash()}, nil
 }
 
-func (app *MyApp) CheckTx(ctx context.Context, req *types.CheckTxRequest) (*types.CheckTxResponse, error) {
+func (app *MyApp) CheckTx(_ context.Context, req *types.CheckTxRequest) (*types.CheckTxResponse, error) {
 	app.logger.Info(fmt.Sprintf("--- CHECK TX START---"))
 	app.logger.Info(fmt.Sprintf("Received raw transaction: %s", string(req.Tx)))
 	var meta struct {
@@ -155,24 +155,7 @@ func (app *MyApp) CheckTx(ctx context.Context, req *types.CheckTxRequest) (*type
 	return &types.CheckTxResponse{Code: CodeTypeInvalidTxFormat, Log: "Invalid Transaction Type"}, nil
 }
 
-func (app *MyApp) PrepareProposal(ctx context.Context, req *types.PrepareProposalRequest) (*types.PrepareProposalResponse, error) {
-	return &types.PrepareProposalResponse{Txs: req.Txs}, nil
-}
-
-func (app *MyApp) ProcessProposal(ctx context.Context, req *types.ProcessProposalRequest) (*types.ProcessProposalResponse, error) {
-	for _, tx := range req.Txs {
-		resp, err := app.CheckTx(ctx, &types.CheckTxRequest{Tx: tx, Type: types.CHECK_TX_TYPE_CHECK})
-		if err != nil {
-			app.logger.Error(fmt.Sprintln("ProcessProposal: CheckTx call had an unrecoverable error", err))
-		}
-		if resp.Code != CodeTypeOK {
-			return &types.ProcessProposalResponse{Status: types.PROCESS_PROPOSAL_STATUS_REJECT}, nil
-		}
-	}
-	return &types.ProcessProposalResponse{Status: types.PROCESS_PROPOSAL_STATUS_ACCEPT}, nil
-}
-
-func (app *MyApp) FinalizeBlock(ctx context.Context, req *types.FinalizeBlockRequest) (*types.FinalizeBlockResponse, error) {
+func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockRequest) (*types.FinalizeBlockResponse, error) {
 	app.logger.Info(fmt.Sprintf("=== [FINALIZE BLOCK START] (Block: %d) ===", req.Height))
 	var meta struct {
 		Type string `json:"type"`
@@ -242,16 +225,58 @@ func (app *MyApp) FinalizeBlock(ctx context.Context, req *types.FinalizeBlockReq
 			}
 			amountStr := strings.TrimSuffix(tx.Amount, " tokens")
 			amountInt, _ := strconv.ParseInt(amountStr, 10, 64)
+			fromBalance, fromExists := app.state.Ledger[tx.FromNode]
+			_, toExists := app.state.Ledger[tx.ToNode]
+			var events []types.Event
+			if fromExists && toExists {
+				if fromBalance < amountInt {
+					txResults = append(txResults, &types.ExecTxResult{
+						Code: 7,
+						Log:  "Insufficient funds",
+					})
+					continue
+				}
+				app.state.Ledger[tx.FromNode] -= amountInt
+				app.state.Ledger[tx.ToNode] += amountInt
+			}
+			if fromExists && !toExists {
+				if fromBalance < amountInt {
+					txResults = append(txResults, &types.ExecTxResult{
+						Code: 7,
+						Log:  "Insufficient funds",
+					})
+					continue
+				}
+				app.state.Ledger[tx.FromNode] -= amountInt
+				events = []types.Event{
+					{
+						Type: "relay_transfer",
+						Attributes: []types.EventAttribute{
+							{Key: "from", Value: tx.FromNode, Index: true},
+							{Key: "to", Value: tx.ToNode, Index: true},
+							{Key: "amount", Value: tx.Amount, Index: true},
+							{Key: "timestamp", Value: tx.Timestamp, Index: false},
+						},
+					},
+				}
 
-			fromBalance := app.state.Ledger[tx.FromNode]
-			if fromBalance < amountInt {
-				txResults = append(txResults, &types.ExecTxResult{Code: 7, Log: "Insufficient funds"})
+				app.logger.Info("Relay processing", "from", tx.FromNode, "to", tx.ToNode, "fromExists", fromExists, "toExists", toExists)
+			}
+			if !fromExists && toExists {
+				app.state.Ledger[tx.ToNode] += amountInt
+			}
+			if !fromExists && !toExists {
+				txResults = append(txResults, &types.ExecTxResult{
+					Code: 8,
+					Log:  "transaction not relevant to this cluster",
+				})
 				continue
 			}
-
-			app.state.Ledger[tx.FromNode] -= amountInt
-			app.state.Ledger[tx.ToNode] += amountInt
-			txResults = append(txResults, &types.ExecTxResult{Code: 0, Log: "Executed"})
+			txResults = append(txResults, &types.ExecTxResult{
+				Code:   CodeTypeOK,
+				Log:    "Executed",
+				Events: events,
+			})
 			app.state.Size++
 		} else if meta.Type == AddValidatorType || meta.Type == RemoveValidatorType || meta.Type == UpdateValidatorType {
 			var vtx Validators
@@ -260,7 +285,7 @@ func (app *MyApp) FinalizeBlock(ctx context.Context, req *types.FinalizeBlockReq
 				continue
 			}
 			app.updateValidator(string(decodedStrTx))
-			txResults = append(txResults, &types.ExecTxResult{Code: 0, Log: "Validator Request Executed"})
+			txResults = append(txResults, &types.ExecTxResult{Code: CodeTypeOK, Log: "Validator Request Executed"})
 		}
 	}
 	app.lastBlockHeight = req.Height
@@ -268,7 +293,27 @@ func (app *MyApp) FinalizeBlock(ctx context.Context, req *types.FinalizeBlockReq
 	return &types.FinalizeBlockResponse{TxResults: txResults, AppHash: app.state.Hash(), ValidatorUpdates: app.valUpdates}, nil
 }
 
-func (app *MyApp) Commit(ctx context.Context, req *types.CommitRequest) (*types.CommitResponse, error) {
+func (app *MyApp) Query(_ context.Context, query *types.QueryRequest) (*types.QueryResponse, error) {
+	app.logger.Info("Executing Application Query.")
+	resp := types.QueryResponse{Key: query.Data}
+	switch string(query.Data) {
+	case "balance":
+		resultBytes, err := json.Marshal(app.state.Ledger)
+		if err != nil {
+			return nil, err
+		}
+		resp.Log = "Full ledger state"
+		resp.Value = resultBytes
+		return &resp, nil
+
+	default:
+		resp.Log = "unknown query"
+		resp.Value = []byte{}
+		return &resp, nil
+	}
+}
+
+func (app *MyApp) Commit(_ context.Context, _ *types.CommitRequest) (*types.CommitResponse, error) {
 	app.logger.Info(fmt.Sprintf("[Committing Transaction] (Block: %d) +++", app.lastBlockHeight))
 	app.logger.Info(fmt.Sprintf("Persisting Transaction to DB"))
 	app.SaveToDB()
@@ -516,19 +561,23 @@ func (app *MyApp) CheckTransferTX(reqtx string) (*types.CheckTxResponse, error) 
 		msg := fmt.Sprintf("ERROR: Invalid amount: %s", tx.Amount)
 		return &types.CheckTxResponse{Code: 5, Log: msg}, nil
 	}
-
-	fromBalance, ok := app.state.Ledger[tx.FromNode]
-	if !ok {
-		return &types.CheckTxResponse{Code: 6, Log: fmt.Sprintf(" Error: 'from' node '%s' missing", tx.FromNode)}, nil
+	fromBalance, fromExists := app.state.Ledger[tx.FromNode]
+	_, toExists := app.state.Ledger[tx.ToNode]
+	if !fromExists && !toExists {
+		return &types.CheckTxResponse{
+			Code: 6,
+			Log:  "transaction does not belong to this cluster",
+		}, nil
 	}
-	if fromBalance < amountInt {
-		msg := fmt.Sprintf("ERROR: Insufficient funds for '%s'. Has %d, needs %d",
-			tx.FromNode, fromBalance, amountInt)
-		return &types.CheckTxResponse{Code: 7, Log: msg}, nil
+	if fromExists {
+		if fromBalance < amountInt {
+			msg := fmt.Sprintf("ERROR: Insufficient funds for '%s'. Has %d, needs %d",
+				tx.FromNode, fromBalance, amountInt)
+			return &types.CheckTxResponse{Code: 7, Log: msg}, nil
+		}
 	}
-
 	app.logger.Info(fmt.Sprintf("Transaction OK. From=%s, To=%s, Amount=%d", tx.FromNode, tx.ToNode, amountInt))
-	return &types.CheckTxResponse{Code: 0, Log: "Transaction format and logic OK."}, nil
+	return &types.CheckTxResponse{Code: CodeTypeOK, Log: "Transaction format and logic OK."}, nil
 }
 
 func (app *MyApp) CheckValidatorTX(reqtx string) (*types.CheckTxResponse, error) {
@@ -549,7 +598,7 @@ func (app *MyApp) CheckValidatorTX(reqtx string) (*types.CheckTxResponse, error)
 	}
 
 	app.logger.Info(fmt.Sprintf("Validator Transaction OK."))
-	return &types.CheckTxResponse{Code: 0, Log: "Validator Transaction Check passed."}, nil
+	return &types.CheckTxResponse{Code: CodeTypeOK, Log: "Validator Transaction Check passed."}, nil
 }
 
 func (app *MyApp) appendValidatorUpdateOnce(addr string, vu types.ValidatorUpdate) {
