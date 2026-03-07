@@ -361,8 +361,8 @@ func (app *MyApp) updateValidator(vReqTx string) {
 		case AddValidatorType, UpdateValidatorType:
 			app.valAddrToPubKeyMap[addr] = pubkey
 			app.addOrUpdateStateValidator(types.ValidatorUpdate{
-				PubKeyType:  val.PubKeyType, // 🔹 UPDATED
-				PubKeyBytes: pubKeyBytes,    // 🔹 UPDATED
+				PubKeyType:  val.PubKeyType,
+				PubKeyBytes: pubKeyBytes,
 				Power:       val.Power,
 			}, addr)
 			app.appendValidatorUpdateOnce(addr, types.ValidatorUpdate{
