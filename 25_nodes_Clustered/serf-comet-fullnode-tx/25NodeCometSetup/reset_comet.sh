@@ -7,7 +7,8 @@ for i in {1..25}; do
 done
 
 reset_cometbft() {
-  for container in "${containers[@]}"; do
+  for i in "${!containers[@]}"; do
+    container="${containers[$i]}"
     echo "=============================================="
     echo "Resetting ABCI + CometBFT on $container..."
     echo "=============================================="
@@ -39,10 +40,19 @@ reset_cometbft() {
     sleep 1
 
     echo "[5] Restarting ABCI..."
+    docker cp "./abci/." "$container":/root/abci/ || { echo "Failed to copy abci files to $container"; exit 1; }
+    docker cp "./abci/config.yaml" "$container":/root/
+    docker exec "$container" bash -c "cd /root/abci && /usr/local/go/bin/go clean -modcache && /usr/local/go/bin/go mod tidy && /usr/local/go/bin/go build -o /root/abci-app *.go"
     docker exec -d "$container" bash -c "nohup /root/abci-app > /root/logs/abci.log 2>&1"
     sleep 2
 
     echo "[6] Restarting CometBFT..."
+    docker exec "$container" rm -f /root/.cometbft/config/genesis.json
+    if (( i <= 12 )); then
+      docker cp "./cluster1Config/genesis.json" "$container":/root/.cometbft/config/
+    else
+      docker cp "./cluster2Config/genesis.json" "$container":/root/.cometbft/config/
+    fi
     docker exec -d "$container" bash -c "nohup /root/go/bin/cometbft node > /root/logs/cometbft.log 2>&1"
     sleep 3
 
