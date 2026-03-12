@@ -40,6 +40,7 @@ reset_cometbft() {
     sleep 1
 
     echo "[5] Restarting ABCI..."
+    docker exec "$container" bash -c "cd /root && rm -rf abci && mkdir -p abci"
     docker cp "./abci/." "$container":/root/abci/ || { echo "Failed to copy abci files to $container"; exit 1; }
     docker cp "./abci/config.yaml" "$container":/root/
     docker exec "$container" bash -c "cd /root/abci && /usr/local/go/bin/go clean -modcache && /usr/local/go/bin/go mod tidy && /usr/local/go/bin/go build -o /root/abci-app *.go"
