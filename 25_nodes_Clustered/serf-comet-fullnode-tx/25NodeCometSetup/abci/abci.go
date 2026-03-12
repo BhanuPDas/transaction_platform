@@ -92,7 +92,7 @@ func (app *MyApp) InitChain(_ context.Context, req *types.InitChainRequest) (*ty
 				key := fmt.Sprintf("serf%d", i)
 				app.state.Ledger[key] = 10000
 			}
-		} else if len(app.cls) > 1 && app.cls[1] == "clusterB" {
+		} else if len(app.cls) > 0 && app.cls[0] == "clusterB" {
 			for i := 13; i <= 25; i++ {
 				key := fmt.Sprintf("serf%d", i)
 				app.state.Ledger[key] = 10000
