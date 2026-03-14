@@ -14,8 +14,7 @@ HILBERT_URL = "http://127.0.0.1:4041/hilbert-output"
 
 # URL for your CometBFT node's RPC (running on the host)
 COMETBFT_RPC_URL = "http://127.0.0.1:26657"
-#SERF_URL = "http://127.0.0.1:5555"
-serf_cluster_nodes = ["clab-century-serf1","clab-century-serf25"]
+SERF_URL = "http://127.0.0.1:5555"
 BUYER_NODE_JSON = "/opt/serfapp/node.json"
 
 rd = redis.Redis(host='localhost', port=6379, decode_responses=True)
@@ -197,24 +196,23 @@ def dial_peers(peers: list[str], persistent: bool = False):
 
 
 def get_nodeip_and_bftaddr(buyer: str):
-    logger.info(f"Checking Active members from {serf_cluster_nodes}/members")
+    logger.info(f"Checking Active members from {SERF_URL}/members")
     buyer_ip = None
-    bft_peers = []
-    #response = requests.get(f"{SERF_URL}/members", timeout=5)
-    for serf_nodes in serf_cluster_nodes:
-        response = requests.get(f"http://{serf_nodes}:5555/members", timeout=5)
-        if response.status_code == 200:
-            members_data = response.json()
-            for member in members_data:
-                if member.get("Name") == buyer:
-                    buyer_ip = member.get("Addr", None)
-                tags = member.get("Tags", {})
-                bft_addr = tags.get("rpc_addr")
-                if bft_addr:
-                    bft_peers.append(bft_addr)
-                else:
-                    logger.error(f"Failed to get members from Serf node: {serf_nodes}.")
-    return bft_peers, buyer_ip
+    response = requests.get(f"{SERF_URL}/members", timeout=5)
+    if response.status_code == 200:
+        members_data = response.json()
+        bft_peers = []
+        for member in members_data:
+            if member.get("Name") == buyer:
+                buyer_ip = member.get("Addr", None)
+            tags = member.get("Tags", {})
+            bft_addr = tags.get("rpc_addr")
+            if bft_addr:
+                bft_peers.append(bft_addr)
+        return bft_peers, buyer_ip
+    else:
+        logger.error("Failed to get members from Serf.")
+        return [], None
 
 
 def broadcast_transaction(tx_json):
