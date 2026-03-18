@@ -1,5 +1,5 @@
 cluster_a_url: "http://clab-century-serf1:26657"
 cluster_b_url: "http://clab-century-serf13:26657"
 query: "tm.event='Tx' AND relay_transfer.from EXISTS"
-broadcast_mode: "sync"
+broadcast_mode: "async"
 request_timeout: 5s
