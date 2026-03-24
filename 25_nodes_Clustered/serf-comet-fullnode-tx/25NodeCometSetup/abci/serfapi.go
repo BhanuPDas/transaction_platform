@@ -59,6 +59,41 @@ func StartHTTPServer(ctx context.Context, listenAddr string, rpcAddr string) err
 		w.WriteHeader(http.StatusNoContent)
 	})
 
+	mux.HandleFunc("/trigger_event", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Name    string                 `json:"name"`
+			Payload map[string]interface{} `json:"payload"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if req.Name == "" {
+			http.Error(w, "event name is required", http.StatusBadRequest)
+			return
+		}
+
+		payloadBytes, err := json.Marshal(req.Payload)
+		if err != nil {
+			http.Error(w, "failed to marshal payload: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if err := c.UserEvent(req.Name, payloadBytes, false); err != nil {
+			http.Error(w, "failed to send user event: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	})
+
 	httpSrv := &http.Server{
 		Addr:    listenAddr,
 		Handler: mux,

@@ -18,11 +18,15 @@ import (
 )
 
 type TransferTransaction struct {
-	Type      string `json:"type"`
-	FromNode  string `json:"from_node"`
-	ToNode    string `json:"to_node"`
-	Amount    string `json:"amount"`
-	Timestamp string `json:"timestamp"`
+	Type         string  `json:"type"`
+	Buyer        string  `json:"buyer"`
+	Seller       string  `json:"seller"`
+	Amount       int64   `json:"amount"`
+	Quantity     int64   `json:"quantity"`
+	ScoreRam     float64 `json:"score_ram"`
+	Price        float64 `json:"price"`
+	ResourceType string  `json:"resource_type"`
+	InitTime     string  `json:"tx_timestamp"`
 }
 
 type Validators struct {
@@ -54,6 +58,8 @@ type MyApp struct {
 	updatedValidatorsThisBlock map[string]struct{}
 	logger                     log.Logger
 	cls                        []string
+	seenTx                     map[string]bool
+	committedTx                map[string]bool
 }
 
 func NewMyApp(db *pebble.DB, logger log.Logger, cluster *AppConfig) *MyApp {
@@ -67,6 +73,8 @@ func NewMyApp(db *pebble.DB, logger log.Logger, cluster *AppConfig) *MyApp {
 		logger:                     logger,
 		updatedValidatorsThisBlock: make(map[string]struct{}),
 		cls:                        cluster.ClusterName,
+		seenTx:                     make(map[string]bool),
+		committedTx:                make(map[string]bool),
 	}
 	app.logger.Info(fmt.Sprintf("Loading Data from DB..."))
 	app.LoadFromDB()
@@ -213,6 +221,12 @@ func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockReque
 			})
 			continue
 		}
+		txHash := hashTx(decodedStrTx)
+		if app.committedTx[txHash] {
+			app.logger.Info("Duplicate tx ignored..", "hash", txHash)
+			txResults = append(txResults, &types.ExecTxResult{Code: 5, Log: "duplicate tx ignored"})
+			continue
+		}
 		if err := json.Unmarshal(decodedStrTx, &meta); err != nil {
 			txResults = append(txResults, &types.ExecTxResult{Code: 2, Log: "Bad JSON"})
 			continue
@@ -223,47 +237,46 @@ func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockReque
 				txResults = append(txResults, &types.ExecTxResult{Code: 2, Log: "Bad JSON"})
 				continue
 			}
-			amountStr := strings.TrimSuffix(tx.Amount, " tokens")
-			amountInt, _ := strconv.ParseInt(amountStr, 10, 64)
-			fromBalance, fromExists := app.state.Ledger[tx.FromNode]
-			_, toExists := app.state.Ledger[tx.ToNode]
+
+			fromBalance, fromExists := app.state.Ledger[tx.Buyer]
+			_, toExists := app.state.Ledger[tx.Seller]
 			var events []types.Event
 			if fromExists && toExists {
-				if fromBalance < amountInt {
+				if fromBalance < tx.Amount {
 					txResults = append(txResults, &types.ExecTxResult{
 						Code: 7,
 						Log:  "Insufficient funds",
 					})
 					continue
 				}
-				app.state.Ledger[tx.FromNode] -= amountInt
-				app.state.Ledger[tx.ToNode] += amountInt
+				app.state.Ledger[tx.Buyer] -= tx.Amount
+				app.state.Ledger[tx.Seller] += tx.Amount
 			}
 			if fromExists && !toExists {
-				if fromBalance < amountInt {
+				if fromBalance < tx.Amount {
 					txResults = append(txResults, &types.ExecTxResult{
 						Code: 7,
 						Log:  "Insufficient funds",
 					})
 					continue
 				}
-				app.state.Ledger[tx.FromNode] -= amountInt
+				app.state.Ledger[tx.Buyer] -= tx.Amount
 				events = []types.Event{
 					{
 						Type: "relay_transfer",
 						Attributes: []types.EventAttribute{
-							{Key: "from", Value: tx.FromNode, Index: true},
-							{Key: "to", Value: tx.ToNode, Index: true},
-							{Key: "amount", Value: tx.Amount, Index: true},
-							{Key: "timestamp", Value: tx.Timestamp, Index: false},
+							{Key: "from", Value: tx.Buyer, Index: true},
+							{Key: "to", Value: tx.Seller, Index: true},
+							{Key: "amount", Value: strconv.FormatInt(tx.Amount, 10), Index: true},
+							{Key: "timestamp", Value: tx.InitTime, Index: false},
 						},
 					},
 				}
 
-				app.logger.Info("Relay processing", "from", tx.FromNode, "to", tx.ToNode, "fromExists", fromExists, "toExists", toExists)
+				app.logger.Info("Relay processing", "from", tx.Buyer, "to", tx.Seller, "fromExists", fromExists, "toExists", toExists)
 			}
 			if !fromExists && toExists {
-				app.state.Ledger[tx.ToNode] += amountInt
+				app.state.Ledger[tx.Seller] += tx.Amount
 			}
 			if !fromExists && !toExists {
 				txResults = append(txResults, &types.ExecTxResult{
@@ -277,6 +290,7 @@ func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockReque
 				Log:    "Executed",
 				Events: events,
 			})
+			app.committedTx[txHash] = true
 			app.state.Size++
 		} else if meta.Type == AddValidatorType || meta.Type == RemoveValidatorType || meta.Type == UpdateValidatorType {
 			var vtx Validators
@@ -544,25 +558,25 @@ func (app *MyApp) SaveToDB() {
 }
 
 func (app *MyApp) CheckTransferTX(reqtx string) (*types.CheckTxResponse, error) {
+	txHash := hashTx([]byte(reqtx))
+	if app.seenTx[txHash] {
+		return &types.CheckTxResponse{
+			Code: 5,
+			Log:  "Duplicate transaction in mempool",
+		}, nil
+	}
 	var tx TransferTransaction
 	if err := json.Unmarshal([]byte(reqtx), &tx); err != nil {
 		msg := fmt.Sprintf("ERROR: Failed to parse JSON: %v", err)
 		return &types.CheckTxResponse{Code: 2, Log: msg}, nil
 	}
-	if tx.Type == "" || tx.FromNode == "" || tx.ToNode == "" || tx.Amount == "" || tx.Timestamp == "" {
+	if tx.Type == "" || tx.Buyer == "" || tx.Seller == "" || tx.Amount <= 0 || tx.InitTime == "" {
 		logMsg := "ABCI CheckTx ERROR: Missing one or more required fields (type, from_node, to_node, amount, timestamp)."
 		app.logger.Error(logMsg)
 		return &types.CheckTxResponse{Code: 4, Log: logMsg}, nil
 	}
-
-	amountStr := strings.TrimSuffix(tx.Amount, " tokens")
-	amountInt, err := strconv.ParseInt(amountStr, 10, 64)
-	if err != nil {
-		msg := fmt.Sprintf("ERROR: Invalid amount: %s", tx.Amount)
-		return &types.CheckTxResponse{Code: 5, Log: msg}, nil
-	}
-	fromBalance, fromExists := app.state.Ledger[tx.FromNode]
-	_, toExists := app.state.Ledger[tx.ToNode]
+	fromBalance, fromExists := app.state.Ledger[tx.Buyer]
+	_, toExists := app.state.Ledger[tx.Seller]
 	if !fromExists && !toExists {
 		return &types.CheckTxResponse{
 			Code: 6,
@@ -570,13 +584,14 @@ func (app *MyApp) CheckTransferTX(reqtx string) (*types.CheckTxResponse, error) 
 		}, nil
 	}
 	if fromExists {
-		if fromBalance < amountInt {
+		if fromBalance < tx.Amount {
 			msg := fmt.Sprintf("ERROR: Insufficient funds for '%s'. Has %d, needs %d",
-				tx.FromNode, fromBalance, amountInt)
+				tx.Buyer, fromBalance, tx.Amount)
 			return &types.CheckTxResponse{Code: 7, Log: msg}, nil
 		}
 	}
-	app.logger.Info(fmt.Sprintf("Transaction OK. From=%s, To=%s, Amount=%d", tx.FromNode, tx.ToNode, amountInt))
+	app.logger.Info(fmt.Sprintf("Transaction OK. From=%s, To=%s, Amount=%d", tx.Buyer, tx.Seller, tx.Amount))
+	app.seenTx[txHash] = true
 	return &types.CheckTxResponse{Code: CodeTypeOK, Log: "Transaction format and logic OK."}, nil
 }
 
@@ -608,4 +623,9 @@ func (app *MyApp) appendValidatorUpdateOnce(addr string, vu types.ValidatorUpdat
 	}
 	app.updatedValidatorsThisBlock[addr] = struct{}{}
 	app.valUpdates = append(app.valUpdates, vu)
+}
+
+func hashTx(tx []byte) string {
+	sum := sha256.Sum256(tx)
+	return fmt.Sprintf("%x", sum)
 }

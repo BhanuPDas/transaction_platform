@@ -30,6 +30,14 @@ def create_pricing_payload(buyer, seller, quantity, score_ram, price, tx_id, tx_
 
 def send_p2p_event(tx):
     logger.info(f"Triggering P2P user events {SERF_URL}/trigger_event")
-    response = requests.get(f"{SERF_URL}/trigger_event", timeout=5)
-    #if response.status_code == 200:
-
+    url = f"{SERF_URL}/trigger_event"
+    payload = {
+        "name": "tx_success_event",
+        "payload": tx
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=5)
+        response.raise_for_status()
+        logger.info("P2P event sent successfully")
+    except Exception as ex:
+        logger.error(f"Exception raised {ex}")
