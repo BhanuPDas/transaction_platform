@@ -58,8 +58,6 @@ type MyApp struct {
 	updatedValidatorsThisBlock map[string]struct{}
 	logger                     log.Logger
 	cls                        []string
-	//seenTx                     map[string]bool
-	//committedTx map[string]bool
 }
 
 func NewMyApp(db *pebble.DB, logger log.Logger, cluster *AppConfig) *MyApp {
@@ -73,8 +71,6 @@ func NewMyApp(db *pebble.DB, logger log.Logger, cluster *AppConfig) *MyApp {
 		logger:                     logger,
 		updatedValidatorsThisBlock: make(map[string]struct{}),
 		cls:                        cluster.ClusterName,
-		//seenTx:                     make(map[string]bool),
-		//committedTx: make(map[string]bool),
 	}
 	app.logger.Info(fmt.Sprintf("Loading Data from DB..."))
 	app.LoadFromDB()
@@ -221,12 +217,6 @@ func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockReque
 			})
 			continue
 		}
-		/*txHash := hashTx(decodedStrTx)
-		if app.committedTx[txHash] {
-			app.logger.Info("Duplicate tx ignored..", "hash", txHash)
-			txResults = append(txResults, &types.ExecTxResult{Code: 5, Log: "duplicate tx ignored"})
-			continue
-		}*/
 		if err := json.Unmarshal(decodedStrTx, &meta); err != nil {
 			txResults = append(txResults, &types.ExecTxResult{Code: 2, Log: "Bad JSON"})
 			continue
@@ -290,7 +280,6 @@ func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockReque
 				Log:    "Executed",
 				Events: events,
 			})
-			//app.committedTx[txHash] = true
 			app.state.Size++
 		} else if meta.Type == AddValidatorType || meta.Type == RemoveValidatorType || meta.Type == UpdateValidatorType {
 			var vtx Validators
@@ -558,13 +547,6 @@ func (app *MyApp) SaveToDB() {
 }
 
 func (app *MyApp) CheckTransferTX(reqtx string) (*types.CheckTxResponse, error) {
-	/*txHash := hashTx([]byte(reqtx))
-	if app.seenTx[txHash] {
-		return &types.CheckTxResponse{
-			Code: 5,
-			Log:  "Duplicate transaction in mempool",
-		}, nil
-	}*/
 	var tx TransferTransaction
 	if err := json.Unmarshal([]byte(reqtx), &tx); err != nil {
 		msg := fmt.Sprintf("ERROR: Failed to parse JSON: %v", err)
@@ -591,7 +573,6 @@ func (app *MyApp) CheckTransferTX(reqtx string) (*types.CheckTxResponse, error) 
 		}
 	}
 	app.logger.Info(fmt.Sprintf("Transaction OK. From=%s, To=%s, Amount=%d", tx.Buyer, tx.Seller, tx.Amount))
-	//app.seenTx[txHash] = true
 	return &types.CheckTxResponse{Code: CodeTypeOK, Log: "Transaction format and logic OK."}, nil
 }
 
@@ -624,8 +605,3 @@ func (app *MyApp) appendValidatorUpdateOnce(addr string, vu types.ValidatorUpdat
 	app.updatedValidatorsThisBlock[addr] = struct{}{}
 	app.valUpdates = append(app.valUpdates, vu)
 }
-
-/*func hashTx(tx []byte) string {
-	sum := sha256.Sum256(tx)
-	return fmt.Sprintf("%x", sum)
-}*/

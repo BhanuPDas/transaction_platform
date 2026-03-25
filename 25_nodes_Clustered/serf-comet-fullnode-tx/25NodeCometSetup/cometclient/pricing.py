@@ -22,7 +22,7 @@ def create_pricing_payload(buyer, seller, quantity, score_ram, price, tx_id, tx_
         "quantity": quantity,
         "seller_score": score_ram,
         "resource_type": "RAM",
-        "transaction id": tx_id,
+        "transaction_id": tx_id,
         "time": tx_committed_time
     }
     logger.info(f"Prepared transaction: {json.dumps(tx)}")
