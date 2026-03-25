@@ -26,7 +26,7 @@ def create_tx_payload(buyer, seller, amount, quantity, score_ram, price):
         "amount": amount,
         "quantity": quantity,
         "score_ram": score_ram,
-        "lowest_price": price,
+        "price": price,
         "resource_type": "RAM",
         "tx_timestamp": datetime.datetime.now().isoformat()
     }
