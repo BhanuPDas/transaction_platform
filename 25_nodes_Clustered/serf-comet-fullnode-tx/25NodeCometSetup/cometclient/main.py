@@ -153,9 +153,13 @@ def main_loop():
         except Exception as e:
             logger.error(f"An unexpected error occurred in main loop: {e}")
 
-        time.sleep(10)
+        time.sleep(20)
         logger.info("Fetching Transaction Block...")
         block_height = transactions.search_tx(tx_hash)
+        try:
+            block_height = int(block_height)
+        except (ValueError, TypeError):
+            block_height = 0
         if block_height > 0:
             tx_id, tx_committed_time = transactions.get_tx_block(block_height)
             if tx_id and tx_committed_time:
