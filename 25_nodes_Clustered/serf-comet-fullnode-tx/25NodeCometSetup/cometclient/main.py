@@ -159,6 +159,7 @@ def main_loop():
         if block_height > 0:
             tx_id, tx_committed_time = transactions.get_tx_block(block_height)
             if tx_id and tx_committed_time:
+                logger.info(f"Transaction has been committed. Tx ID: {tx_id} Date: {tx_committed_time}")
                 pr_tx = pricing.create_pricing_payload(buyer, seller, quantity, score_ram, lowest_price, tx_id, tx_committed_time)
                 pricing.send_p2p_event(pr_tx)
                 trigger_liqo.publish_redis(buyer, buyer_ip, seller, seller_ip, cpu, ram, storage, gpu, amount, quantity)

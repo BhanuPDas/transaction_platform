@@ -38,6 +38,6 @@ def send_p2p_event(tx):
     try:
         response = requests.post(url, json=payload, timeout=5)
         response.raise_for_status()
-        logger.info("P2P event sent successfully")
+        logger.info(f"P2P event sent successfully. Event: {payload} Response: {response.text}")
     except Exception as ex:
         logger.error(f"Exception raised {ex}")
