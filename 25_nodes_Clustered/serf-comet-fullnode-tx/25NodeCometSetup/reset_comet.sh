@@ -44,11 +44,11 @@ reset_cometbft() {
     docker cp "./abci/." "$container":/root/abci/ || { echo "Failed to copy abci files to $container"; exit 1; }
     docker cp "./cometclient/." "$container":/root/cometclient/ || { echo "Failed to copy main.py file to $container"; exit 1; }
     docker exec "$container" bash -c "cd /root/abci && /usr/local/go/bin/go clean -modcache && /usr/local/go/bin/go mod tidy && /usr/local/go/bin/go build -o /root/abci-app *.go"
-#    if (( i < 12 )); then
-#     docker exec -d "$container" bash -c "cd /root/abci/clusterAConfig && nohup /root/abci-app > /root/logs/abci.log 2>&1"
-#    else
-#      docker exec -d "$container" bash -c "cd /root/abci/clusterBConfig && nohup /root/abci-app > /root/logs/abci.log 2>&1"
-#    fi
+    if (( i < 12 )); then
+     docker exec -d "$container" bash -c "cd /root/abci/clusterAConfig && nohup /root/abci-app > /root/logs/abci.log 2>&1"
+    else
+      docker exec -d "$container" bash -c "cd /root/abci/clusterBConfig && nohup /root/abci-app > /root/logs/abci.log 2>&1"
+    fi
     sleep 2
 
     echo "[6] Restarting CometBFT..."
