@@ -59,7 +59,7 @@ type MyApp struct {
 	logger                     log.Logger
 	cls                        []string
 	//seenTx                     map[string]bool
-	committedTx map[string]bool
+	//committedTx map[string]bool
 }
 
 func NewMyApp(db *pebble.DB, logger log.Logger, cluster *AppConfig) *MyApp {
@@ -74,7 +74,7 @@ func NewMyApp(db *pebble.DB, logger log.Logger, cluster *AppConfig) *MyApp {
 		updatedValidatorsThisBlock: make(map[string]struct{}),
 		cls:                        cluster.ClusterName,
 		//seenTx:                     make(map[string]bool),
-		committedTx: make(map[string]bool),
+		//committedTx: make(map[string]bool),
 	}
 	app.logger.Info(fmt.Sprintf("Loading Data from DB..."))
 	app.LoadFromDB()
@@ -221,12 +221,12 @@ func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockReque
 			})
 			continue
 		}
-		txHash := hashTx(decodedStrTx)
+		/*txHash := hashTx(decodedStrTx)
 		if app.committedTx[txHash] {
 			app.logger.Info("Duplicate tx ignored..", "hash", txHash)
 			txResults = append(txResults, &types.ExecTxResult{Code: 5, Log: "duplicate tx ignored"})
 			continue
-		}
+		}*/
 		if err := json.Unmarshal(decodedStrTx, &meta); err != nil {
 			txResults = append(txResults, &types.ExecTxResult{Code: 2, Log: "Bad JSON"})
 			continue
@@ -290,7 +290,7 @@ func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockReque
 				Log:    "Executed",
 				Events: events,
 			})
-			app.committedTx[txHash] = true
+			//app.committedTx[txHash] = true
 			app.state.Size++
 		} else if meta.Type == AddValidatorType || meta.Type == RemoveValidatorType || meta.Type == UpdateValidatorType {
 			var vtx Validators
@@ -625,7 +625,7 @@ func (app *MyApp) appendValidatorUpdateOnce(addr string, vu types.ValidatorUpdat
 	app.valUpdates = append(app.valUpdates, vu)
 }
 
-func hashTx(tx []byte) string {
+/*func hashTx(tx []byte) string {
 	sum := sha256.Sum256(tx)
 	return fmt.Sprintf("%x", sum)
-}
+}*/
