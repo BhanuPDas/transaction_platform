@@ -142,6 +142,7 @@ def search_tx(tx_hash: str):
     try:
         url = f"{COMETBFT_RPC_URL}/tx"
         params = {"hash": f"0x{tx_hash.lstrip('0x')}", "prove": "true"}
+        logger.info(f"Request url: {url} Params: {params}")
         response = requests.get(url, params=params, timeout=3)
         res = response.json()
         if "error" in res:
@@ -149,13 +150,13 @@ def search_tx(tx_hash: str):
         else:
             result = res.get("result", {})
             if result:
-                tx_height = result.get("height")
+                tx_height = result.get("height", "")
                 return tx_height
             else:
                 logger.error(f"Transaction {tx_hash} not found...")
     except Exception as ex:
         logger.error(f"Exception raised {ex}")
-    return 0
+    return ""
 
 
 def get_tx_block(block_height):

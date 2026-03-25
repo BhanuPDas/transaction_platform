@@ -58,8 +58,8 @@ type MyApp struct {
 	updatedValidatorsThisBlock map[string]struct{}
 	logger                     log.Logger
 	cls                        []string
-	seenTx                     map[string]bool
-	committedTx                map[string]bool
+	//seenTx                     map[string]bool
+	committedTx map[string]bool
 }
 
 func NewMyApp(db *pebble.DB, logger log.Logger, cluster *AppConfig) *MyApp {
@@ -73,8 +73,8 @@ func NewMyApp(db *pebble.DB, logger log.Logger, cluster *AppConfig) *MyApp {
 		logger:                     logger,
 		updatedValidatorsThisBlock: make(map[string]struct{}),
 		cls:                        cluster.ClusterName,
-		seenTx:                     make(map[string]bool),
-		committedTx:                make(map[string]bool),
+		//seenTx:                     make(map[string]bool),
+		committedTx: make(map[string]bool),
 	}
 	app.logger.Info(fmt.Sprintf("Loading Data from DB..."))
 	app.LoadFromDB()
@@ -558,13 +558,13 @@ func (app *MyApp) SaveToDB() {
 }
 
 func (app *MyApp) CheckTransferTX(reqtx string) (*types.CheckTxResponse, error) {
-	txHash := hashTx([]byte(reqtx))
+	/*txHash := hashTx([]byte(reqtx))
 	if app.seenTx[txHash] {
 		return &types.CheckTxResponse{
 			Code: 5,
 			Log:  "Duplicate transaction in mempool",
 		}, nil
-	}
+	}*/
 	var tx TransferTransaction
 	if err := json.Unmarshal([]byte(reqtx), &tx); err != nil {
 		msg := fmt.Sprintf("ERROR: Failed to parse JSON: %v", err)
@@ -591,7 +591,7 @@ func (app *MyApp) CheckTransferTX(reqtx string) (*types.CheckTxResponse, error) 
 		}
 	}
 	app.logger.Info(fmt.Sprintf("Transaction OK. From=%s, To=%s, Amount=%d", tx.Buyer, tx.Seller, tx.Amount))
-	app.seenTx[txHash] = true
+	//app.seenTx[txHash] = true
 	return &types.CheckTxResponse{Code: CodeTypeOK, Log: "Transaction format and logic OK."}, nil
 }
 
