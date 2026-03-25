@@ -62,7 +62,7 @@ def find_best_seller(api_data):
         if best_seller:
             logger.info(f"--- Found best seller: '{best_seller}' at price {lowest_price} ---")
             # Take arbitary data for quantity and amount
-            quantity = random.randint(1, round(ram)-1)
+            quantity = random.randint(1, 100)
             amount = math.ceil(quantity * lowest_price)
             return best_seller, amount, seller_ip, cpu, ram, storage, gpu, quantity, score_ram, lowest_price
         else:
