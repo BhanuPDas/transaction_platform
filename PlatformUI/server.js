@@ -56,20 +56,19 @@ app.use('/api/hilbert', createProxyMiddleware({
 
 // Proxy dynamic Ledger requests based on node address
 app.use('/api/ledger', createProxyMiddleware({
-  target: 'http://localhost:26657', // Must provide default target
+  target: 'http://localhost:26657',
   router: (req) => {
     let addr = req.query.targetAddr;
-    if (!addr) {
-      return 'http://localhost:26657'; // fallback
-    }
-    // Remove port if included in the addr
-    addr = addr.split(':')[0];
-    return `http://${addr}:26657`;
+    if (!addr) return 'http://localhost:26657';
+    return `http://${addr.split(':')[0]}:26657`;
   },
   changeOrigin: true,
   pathRewrite: (path, req) => {
-    console.log(`[Proxy] Cleaning path for ${req.query.targetAddr}`);
-    return '/abci_query';
+    const dataParam = req.query.data || '';
+    const newPath = `/abci_query?data=${dataParam}`;
+
+    console.log(`[Ledger Proxy] Forwarding to: ${newPath}`);
+    return newPath;
   }
 }));
 

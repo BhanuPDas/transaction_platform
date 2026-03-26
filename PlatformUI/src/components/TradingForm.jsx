@@ -51,7 +51,7 @@ export default function TradingForm({ onCheckBalance }) {
             const mapping = {};
             filtered.forEach(m => mapping[m.Name] = m.Addr);
             setBuyerMap(mapping);
-            
+
             const sortedNames = filtered.map(m => m.Name).sort((a, b) => a.localeCompare(b));
             setBuyersList(sortedNames);
           } else {
@@ -138,7 +138,7 @@ export default function TradingForm({ onCheckBalance }) {
         ramDemand: bestSeller.ram !== undefined ? bestSeller.ram : '',
         storageDemand: bestSeller.storage !== undefined ? bestSeller.storage : '',
         gpuDemand: bestSeller.gpu !== undefined ? bestSeller.gpu : '',
-        amount: '$' + amountVal
+        amount: '€' + amountVal
       });
     } else {
       setSpecs({
