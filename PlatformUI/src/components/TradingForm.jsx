@@ -51,7 +51,9 @@ export default function TradingForm({ onCheckBalance }) {
             const mapping = {};
             filtered.forEach(m => mapping[m.Name] = m.Addr);
             setBuyerMap(mapping);
-            setBuyersList(filtered.map(m => m.Name));
+            
+            const sortedNames = filtered.map(m => m.Name).sort((a, b) => a.localeCompare(b));
+            setBuyersList(sortedNames);
           } else {
             console.error('Failed to fetch members');
             setBuyersList([]);

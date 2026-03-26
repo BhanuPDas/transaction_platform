@@ -67,7 +67,10 @@ app.use('/api/ledger', createProxyMiddleware({
     return `http://${addr}:26657`;
   },
   changeOrigin: true,
-  pathRewrite: { '^/api/ledger': '/abci_query' }
+  pathRewrite: (path, req) => {
+    console.log(`[Proxy] Cleaning path for ${req.query.targetAddr}`);
+    return '/abci_query';
+  }
 }));
 
 // Serve static files from the Vite build output directory
