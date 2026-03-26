@@ -29,16 +29,35 @@ app.use('/api/clusterB', createProxyMiddleware({
 
 // Proxy dynamic Hilbert requests based on node address
 app.use('/api/hilbert', createProxyMiddleware({
+  target: 'http://localhost:4041', // Must provide default target
   router: (req) => {
     // The targetAddr is passed by the frontend
-    const addr = req.query.targetAddr;
+    let addr = req.query.targetAddr;
     if (!addr) {
       return 'http://localhost:4041'; // fallback
     }
+    // Remove port if included in the addr (e.g. 172.20.20.2:5555 -> 172.20.20.2)
+    addr = addr.split(':')[0];
     return `http://${addr}:4041`;
   },
   changeOrigin: true,
   pathRewrite: { '^/api/hilbert': '/hilbert-output' }
+}));
+
+// Proxy dynamic Ledger requests based on node address
+app.use('/api/ledger', createProxyMiddleware({
+  target: 'http://localhost:26657', // Must provide default target
+  router: (req) => {
+    let addr = req.query.targetAddr;
+    if (!addr) {
+      return 'http://localhost:26657'; // fallback
+    }
+    // Remove port if included in the addr
+    addr = addr.split(':')[0];
+    return `http://${addr}:26657`;
+  },
+  changeOrigin: true,
+  pathRewrite: { '^/api/ledger': '/abci_query' }
 }));
 
 // Serve static files from the Vite build output directory

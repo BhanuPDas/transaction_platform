@@ -15,7 +15,7 @@ export default function LedgerBalance({ buyerAddr, onBack }) {
       }
 
       try {
-        const url = `http://${buyerAddr}:26657/abci_query?data=%22balance%22`;
+        const url = `/api/ledger?targetAddr=${encodeURIComponent(buyerAddr)}&data=%22balance%22`;
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Network error: ${response.status}`);
         

@@ -29,8 +29,9 @@ export default defineConfig({
             // Need a base URL just to parse the search params securely
             const baseUrl = `http://${req.headers.host || 'localhost'}`;
             const url = new URL(req.url, baseUrl);
-            const targetAddr = url.searchParams.get('targetAddr');
+            let targetAddr = url.searchParams.get('targetAddr');
             if (targetAddr) {
+                targetAddr = targetAddr.split(':')[0];
                 return `http://${targetAddr}:4041`;
             }
           } catch (e) {
@@ -39,6 +40,25 @@ export default defineConfig({
           return 'http://localhost:4041';
         },
         rewrite: (path) => path.replace(/^\/api\/hilbert/, '/hilbert-output')
+      },
+      '/api/ledger': {
+        target: 'http://localhost:26657', // Dynamic target, handled by router func
+        changeOrigin: true,
+        router: (req) => {
+          try {
+            const baseUrl = `http://${req.headers.host || 'localhost'}`;
+            const url = new URL(req.url, baseUrl);
+            let targetAddr = url.searchParams.get('targetAddr');
+            if (targetAddr) {
+                targetAddr = targetAddr.split(':')[0];
+                return `http://${targetAddr}:26657`;
+            }
+          } catch (e) {
+            console.error("Vite Proxy Router Error:", e);
+          }
+          return 'http://localhost:26657';
+        },
+        rewrite: (path) => path.replace(/^\/api\/ledger/, '/abci_query')
       }
     }
   }
