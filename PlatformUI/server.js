@@ -1,12 +1,14 @@
 import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import dns from 'dns';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+dns.setDefaultResultOrder('ipv4first');
 
 // Serve static files from the Vite build output directory
 const distPath = join(__dirname, 'dist');
