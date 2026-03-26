@@ -37,9 +37,9 @@ export default function TradingForm({ onCheckBalance }) {
 
       let url = '';
       if (formData.cluster === 'Cluster A') {
-        url = 'http://clab-century-serf1:5555/members';
+        url = '/api/clusterA/members';
       } else if (formData.cluster === 'Cluster B') {
-        url = 'http://clab-century-serf13:5555/members';
+        url = '/api/clusterB/members';
       }
 
       if (url) {
@@ -76,7 +76,8 @@ export default function TradingForm({ onCheckBalance }) {
       }
       try {
         const addr = buyerMap[formData.buyer] || `clab-century-${formData.buyer}`;
-        const url = `http://${addr}:4041/hilbert-output`;
+        // Query param tells proxy the destination without embedding it in domain
+        const url = `/api/hilbert?targetAddr=${encodeURIComponent(addr)}`;
         const response = await fetch(url);
         if (response.ok) {
           const data = await response.json();
