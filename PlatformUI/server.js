@@ -29,29 +29,28 @@ app.use('/api/clusterB', createProxyMiddleware({
 
 // Proxy dynamic Hilbert requests based on node address
 app.use('/api/hilbert', createProxyMiddleware({
-  target: 'http://localhost:4041', // Default fallback
+  target: 'http://localhost:4041', // Placeholder
   router: (req) => {
-    // 1. Try to get the address from the query string
     const targetAddr = req.query.targetAddr;
-
     if (targetAddr) {
-      // Clean the address (remove ports if they were sent in the string)
+      // Strips ports if accidentally passed
       const host = targetAddr.split(':')[0];
-      const finalTarget = `http://${host}:4041`;
-
-      console.log(`[Proxy Success] Routing to: ${finalTarget}`);
-      return finalTarget;
+      return `http://${host}:4041`;
     }
-
-    console.warn('[Proxy Warning] No targetAddr found in request query');
-    return 'http://localhost:4041';
   },
   changeOrigin: true,
-  // This ensures the target container receives "/hilbert-output"
-  pathRewrite: { '^/api/hilbert': '/hilbert-output' },
-  // Important for debugging!
-  onProxyReq: (proxyReq, req, res) => {
-    console.log(`[Proxying] ${req.method} ${req.url} -> ${proxyReq.host}`);
+  // This function is the "Magic Bullet"
+  // It ignores the original path/query and forces ONLY the correct string
+  pathRewrite: (path, req) => {
+    console.log(`[Proxy] Cleaning path for ${req.query.targetAddr}`);
+    return '/hilbert-output';
+  },
+  onProxyRes: (proxyRes, req, res) => {
+    console.log(`[Target Response] Status: ${proxyRes.statusCode} from ${req.query.targetAddr}`);
+  },
+  onError: (err, req, res) => {
+    console.error('[Proxy Error]:', err);
+    res.status(502).send('Proxy could not reach the backend container.');
   }
 }));
 
