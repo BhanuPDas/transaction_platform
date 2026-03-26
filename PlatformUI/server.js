@@ -13,7 +13,7 @@ const distPath = join(__dirname, 'dist');
 app.use(express.static(distPath));
 
 // Handle client-side routing, returning index.html for all non-file requests
-app.get('/*', (req, res) => {
+app.use((req, res) => {
   res.sendFile(join(distPath, 'index.html'));
 });
 
