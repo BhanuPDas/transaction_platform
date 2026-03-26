@@ -14,25 +14,26 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Proxy API requests to Cluster A Backends
-app.use('/api/clusterA', createProxyMiddleware({
+app.use(createProxyMiddleware('/api/clusterA', {
   target: 'http://clab-century-serf1:5555',
   changeOrigin: true,
   pathRewrite: { '^/api/clusterA': '' }
 }));
 
 // Proxy API requests to Cluster B Backends
-app.use('/api/clusterB', createProxyMiddleware({
+app.use(createProxyMiddleware('/api/clusterB', {
   target: 'http://clab-century-serf13:5555',
   changeOrigin: true,
   pathRewrite: { '^/api/clusterB': '' }
 }));
 
 // Proxy dynamic Hilbert requests based on node address
-app.use('/api/hilbert', createProxyMiddleware({
+app.use(createProxyMiddleware('/api/hilbert', {
   target: 'http://localhost:4041', // Must provide default target
   router: (req) => {
     // The targetAddr is passed by the frontend
-    let addr = req.query.targetAddr;
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    let addr = url.searchParams.get('targetAddr');
     if (!addr) {
       return 'http://localhost:4041'; // fallback
     }
@@ -45,10 +46,11 @@ app.use('/api/hilbert', createProxyMiddleware({
 }));
 
 // Proxy dynamic Ledger requests based on node address
-app.use('/api/ledger', createProxyMiddleware({
+app.use(createProxyMiddleware('/api/ledger', {
   target: 'http://localhost:26657', // Must provide default target
   router: (req) => {
-    let addr = req.query.targetAddr;
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    let addr = url.searchParams.get('targetAddr');
     if (!addr) {
       return 'http://localhost:26657'; // fallback
     }
