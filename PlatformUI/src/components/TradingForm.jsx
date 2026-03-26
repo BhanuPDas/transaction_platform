@@ -75,7 +75,7 @@ export default function TradingForm({ onCheckBalance }) {
         return;
       }
       try {
-        const addr = buyerMap[formData.buyer] || `clab-century-${formData.buyer}`;
+        const addr = `clab-century-${formData.buyer}`;
         // Query param tells proxy the destination without embedding it in domain
         const url = `/api/hilbert?targetAddr=${encodeURIComponent(addr)}`;
         const response = await fetch(url);
@@ -197,7 +197,7 @@ export default function TradingForm({ onCheckBalance }) {
       alert("Please select a buyer node first to check their specific ledger balance.");
       return;
     }
-    const addr = buyerMap[formData.buyer] || `clab-century-${formData.buyer}`;
+    const addr = `clab-century-${formData.buyer}`;
     if (onCheckBalance) {
       onCheckBalance(addr);
     }
