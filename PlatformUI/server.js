@@ -11,6 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
+app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // Proxy API requests to Cluster A Backends
@@ -51,6 +52,32 @@ app.use('/api/hilbert', createProxyMiddleware({
   onError: (err, req, res) => {
     console.error('[Proxy Error]:', err);
     res.status(502).send('Proxy could not reach the backend container.');
+  }
+}));
+
+// Proxy Smart Contract initiate_tx POST to the buyer's container
+app.use('/api/initiate_tx', createProxyMiddleware({
+  target: 'http://localhost:5000', // placeholder, overridden by router
+  router: (req) => {
+    const buyer = req.query.targetBuyer;
+    if (!buyer) return 'http://localhost:5000';
+    return `http://clab-century-${buyer.split(':')[0]}:5665`;
+  },
+  changeOrigin: true,
+  pathRewrite: () => '/initiate_tx',
+  on: {
+    proxyReq: (proxyReq, req) => {
+      if (req.body) {
+        const body = JSON.stringify(req.body);
+        proxyReq.setHeader('Content-Type', 'application/json');
+        proxyReq.setHeader('Content-Length', Buffer.byteLength(body));
+        proxyReq.write(body);
+      }
+    }
+  },
+  onError: (err, req, res) => {
+    console.error('[initiate_tx Proxy Error]:', err);
+    res.status(502).json({ error: 'Proxy could not reach the buyer container.' });
   }
 }));
 

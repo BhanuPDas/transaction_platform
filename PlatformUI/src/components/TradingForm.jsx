@@ -26,6 +26,8 @@ export default function TradingForm({ onCheckBalance }) {
   const [buyerMap, setBuyerMap] = useState({});
   const [bestSeller, setBestSeller] = useState(null);
   const [hilbertResults, setHilbertResults] = useState([]);
+  const [txStatus, setTxStatus] = useState(null); // null | 'loading' | 'success' | 'error'
+  const [txMessage, setTxMessage] = useState('');
 
   useEffect(() => {
     const fetchBuyers = async () => {
@@ -182,15 +184,73 @@ export default function TradingForm({ onCheckBalance }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (validateForm()) {
-      const payload = {
-        ...formData,
-        ...specs,
-        buyerAddress: buyerMap[formData.buyer] || ''
-      };
-      alert('Transaction securely submitted to the blockchain network!\n\nPayload:\n' + JSON.stringify(payload, null, 2));
+    if (!validateForm()) return;
+
+    // Resolve IPs
+    const buyerIp = buyerMap[formData.buyer] || '';
+    const sellerIp = bestSeller?.addr || bestSeller?.ip || '';
+
+    // Score is the resource-type-specific score from the seller node
+    let score = 0.0;
+    if (bestSeller) {
+      if (formData.resourceType === 'RAM')
+        score = parseFloat(bestSeller.score_ram ?? bestSeller.ram ?? 0);
+      else if (formData.resourceType === 'vCPU')
+        score = parseFloat(bestSeller.score_cpu ?? bestSeller.cpu ?? 0);
+      else if (formData.resourceType === 'vGPU')
+        score = parseFloat(bestSeller.score_gpu ?? bestSeller.gpu ?? 0);
+      else if (formData.resourceType === 'Storage')
+        score = parseFloat(bestSeller.score_storage ?? bestSeller.storage ?? 0);
+    }
+
+    // Strip the display-only '€' prefix to get raw integer amount
+    const rawAmount = parseInt(String(specs.amount).replace(/[^0-9]/g, ''), 10) || 0;
+
+    const body = {
+      buyer: formData.buyer,
+      seller: specs.seller,
+      buyer_ip: buyerIp,
+      seller_ip: sellerIp,
+      cpu: parseFloat(specs.cpuDemand) || 0.0,
+      ram: parseFloat(specs.ramDemand) || 0.0,
+      storage: parseFloat(specs.storageDemand) || 0.0,
+      gpu: parseFloat(specs.gpuDemand) || 0.0,
+      resource_type: formData.resourceType,
+      amount: rawAmount,                                      // int
+      score: score,                                          // float
+      quantity: parseInt(formData.quantity, 10) || 0,           // int
+      price: parseFloat(bestSeller?.selectedPrice ?? 0),     // float
+      lease_duration: parseInt(formData.leaseDuration, 10) || 0      // int
+    };
+
+    setTxStatus('loading');
+    setTxMessage('');
+
+    try {
+      const response = await fetch(
+        `/api/initiate_tx?targetBuyer=${encodeURIComponent(formData.buyer)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        }
+      );
+
+      if (response.ok) {
+        const result = await response.json().catch(() => ({}));
+        setTxStatus('success');
+        setTxMessage(result.message || 'Transaction successfully submitted to the blockchain network!');
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        setTxStatus('error');
+        setTxMessage(errData.error || `Request failed with status ${response.status}`);
+      }
+    } catch (err) {
+      console.error('initiate_tx error:', err);
+      setTxStatus('error');
+      setTxMessage('Network error: could not reach the buyer container.');
     }
   };
 
@@ -300,13 +360,25 @@ export default function TradingForm({ onCheckBalance }) {
         </div>
 
         <div className="form-group full-width" style={{ display: 'flex', gap: '1rem' }}>
-          <button type="submit" className="btn-primary">
-            Initiate Smart Contract
+          <button type="submit" className="btn-primary" disabled={txStatus === 'loading'}>
+            {txStatus === 'loading' ? 'Submitting…' : 'Initiate Smart Contract'}
           </button>
           <button type="button" className="btn-primary" onClick={handleCheckBalance} style={{ backgroundColor: '#28a745' }}>
             Check Ledger Balance
           </button>
         </div>
+
+        {/* Inline transaction status feedback */}
+        {txStatus === 'success' && (
+          <div className="form-group full-width" style={{ color: '#28a745', fontWeight: 600 }}>
+            ✅ {txMessage}
+          </div>
+        )}
+        {txStatus === 'error' && (
+          <div className="form-group full-width" style={{ color: '#e74c3c', fontWeight: 600 }}>
+            ❌ {txMessage}
+          </div>
+        )}
       </form>
     </div>
   );
