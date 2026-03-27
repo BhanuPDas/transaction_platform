@@ -73,23 +73,23 @@ export default function LedgerBalance({ buyerAddr, onBack }) {
         <div className="chart-wrapper">
           <div className="bar-chart">
             {data.map((item, i) => {
-              const widthRatio = (item.balance / maxBalance) * 100;
+              const heightRatio = (item.balance / maxBalance) * 100;
               const delay = i * 0.1; // Staggered animation
 
               return (
-                <div className="bar-row" key={item.account}>
-                  <div className="bar-label">{item.account}</div>
+                <div className="bar-column" key={item.account}>
                   <div className="bar-track">
                     <div
                       className="bar-fill"
                       style={{
-                        width: `${widthRatio}%`,
+                        height: `${heightRatio}%`,
                         animationDelay: `${delay}s`
                       }}
                     >
                       <span className="bar-value">{item.balance}</span>
                     </div>
                   </div>
+                  <div className="bar-label">{item.account}</div>
                 </div>
               );
             })}

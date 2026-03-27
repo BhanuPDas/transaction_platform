@@ -1,10 +1,9 @@
 import requests
 import json
 import logging
-import sys
+# import sys
 import urllib.parse
 import base64
-import datetime
 
 # URL for your CometBFT node's RPC
 COMETBFT_RPC_URL = "http://127.0.0.1:26657"
@@ -15,7 +14,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def create_tx_payload(buyer, seller, amount, quantity, score_ram, price):
+class CometNotReadyError(Exception):
+    pass
+
+
+def create_tx_payload(buyer, seller, amount, quantity, score, price, resource_type, tx_start_ts, lease_duration,
+                      seller_energy):
     """
     Creates the JSON payload for our transaction.
     """
@@ -25,10 +29,12 @@ def create_tx_payload(buyer, seller, amount, quantity, score_ram, price):
         "seller": seller,
         "amount": amount,
         "quantity": quantity,
-        "score_ram": score_ram,
+        "score": score,
         "price": price,
-        "resource_type": "RAM",
-        "tx_timestamp": datetime.datetime.now().isoformat()
+        "resource_type": resource_type,
+        "tx_start_ts": tx_start_ts,
+        "lease_duration": lease_duration,
+        "seller_energy": seller_energy
     }
     logger.info(f"Prepared transaction: {json.dumps(tx)}")
     return tx
@@ -62,15 +68,17 @@ def check_comet_status():
 
         if catching_up is True:
             logger.error("⚠️  CometBFT node is still syncing blocks. Try after sometime. Terminating execution...")
-            sys.exit(1)
+            raise CometNotReadyError("CometBFT node is still syncing blocks.")
+            # sys.exit(1)
         elif catching_up is False:
             logger.info("✅  CometBFT node is fully synchronized and ready for transactions.")
         else:
             logger.error("❌  Unable to determine catching_up status. Invalid or missing field.")
 
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         logger.error(f"❌  Request failed: {e}")
-        sys.exit(1)
+        raise CometNotReadyError("Request failed")
+        # sys.exit(1)
     return None
 
 
@@ -116,25 +124,27 @@ def broadcast_transaction(tx_json):
         response.raise_for_status()  # Raise an exception for bad HTTP status (4xx or 5xx)
 
         response_json = response.json()
-        broadcast_tx_hash = response_json.get("result", {}).get("hash")
+        if "error" in response_json:
+            logger.error("Transaction broadcast FAILED (RPC error)")
+            logger.error(response_json["error"])
+            return ""
 
         if "result" in response_json:
             result = response_json["result"]
+            broadcast_tx_hash = response_json.get("result", {}).get("hash", "")
             if result.get("code") == 0:
-                logger.info("\nTransaction broadcast successful!")
+                logger.info("\nTransaction Accepted!")
                 logger.info(f"CometBFT Response: {result}")
+                return broadcast_tx_hash
             else:
                 logger.info("\nTransaction was REJECTED by CheckTx.")
                 logger.info(f"CometBFT Response: {result}")
-        else:
-            logger.info(f"\nTransaction broadcast FAILED. Unexpected response:")
-            logger.info(response_json)
-
-        return broadcast_tx_hash
 
     except Exception as e:
         logger.error(f"\nTransaction broadcast FAILED. An error occurred:")
         logger.error(f"Error: {e}")
+
+    return ""
 
 
 def search_tx(tx_hash: str):

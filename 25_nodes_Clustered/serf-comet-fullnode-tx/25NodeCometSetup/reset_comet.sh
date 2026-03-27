@@ -40,7 +40,7 @@ reset_cometbft() {
     sleep 1
 
     echo "[5] Restarting ABCI..."
-    docker exec "$container" bash -c "cd /root && rm -rf abci && mkdir -p abci && mkdir -p cometclient"
+    docker exec "$container" bash -c "cd /root && rm -rf abci && mkdir -p abci && rm -rf cometclient && mkdir -p cometclient"
     docker cp "./abci/." "$container":/root/abci/ || { echo "Failed to copy abci files to $container"; exit 1; }
     docker cp "./cometclient/." "$container":/root/cometclient/ || { echo "Failed to copy main.py file to $container"; exit 1; }
     docker exec "$container" bash -c "cd /root/abci && /usr/local/go/bin/go clean -modcache && /usr/local/go/bin/go mod tidy && /usr/local/go/bin/go build -o /root/abci-app *.go"
@@ -64,6 +64,7 @@ reset_cometbft() {
     echo "[7] Verifying logs..."
     docker exec "$container" tail -n 20 /root/logs/abci.log
     docker exec "$container" tail -n 20 /root/logs/cometbft.log
+    docker exec -d "$container" bash -c "cd /root/cometclient && nohup python3 tx_api.py > /root/logs/tx_api.log 2>&1 &"
 
     echo "✔ Done with $container"
   done

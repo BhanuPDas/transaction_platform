@@ -1,4 +1,3 @@
-import datetime
 import logging
 import json
 import redis
@@ -12,13 +11,14 @@ rd = redis.Redis(host='localhost', port=6379, decode_responses=True)
 channel = "liqo:initiate"
 
 
-def publish_redis(buyer, buyer_ip, seller, seller_ip, cpu, ram, storage, gpu, amount, quantity):
+def publish_redis(buyer, buyer_ip, seller, seller_ip, cpu, ram, storage, gpu, amount, score,
+                  quantity, price, lease_duration, tx_start_ts, seller_energy, resource_type):
     logger.info("Preparing records to publish to redis..")
     tx = {
         "type": "transfer",
-        "from_node": buyer,
+        "buyer": buyer,
         "buyer_ip": buyer_ip,
-        "to_node": seller,
+        "seller": seller,
         "seller_ip": seller_ip,
         "cpu": cpu,
         "ram": ram,
@@ -26,7 +26,12 @@ def publish_redis(buyer, buyer_ip, seller, seller_ip, cpu, ram, storage, gpu, am
         "gpu": gpu,
         "amount": amount,
         "quantity": quantity,
-        "timestamp": datetime.datetime.now().isoformat()
+        "tx_start_ts": tx_start_ts,
+        "seller_energy": seller_energy,
+        "resource_type": resource_type,
+        "score": score,
+        "lease_duration": lease_duration,
+        "price": price
     }
     try:
         msg = json.dumps(tx)
