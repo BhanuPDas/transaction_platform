@@ -4,8 +4,11 @@ const (
 	CodeTypeOK              uint32 = 0
 	CodeTypeInvalidTxFormat uint32 = 2
 	AppVersion              uint64 = 1
-	TransferType                   = "transfer"
-	AddValidatorType               = "addval"
-	RemoveValidatorType            = "remval"
-	UpdateValidatorType            = "updval"
+	TransferType            string = "transfer"
+	AddValidatorType        string = "addval"
+	RemoveValidatorType     string = "remval"
+	UpdateValidatorType     string = "updval"
+	StatusCompleted         string = "Completed"
+	StatusFailed            string = "Failed"
+	StatusOnGoing           string = "OnGoing"
 )

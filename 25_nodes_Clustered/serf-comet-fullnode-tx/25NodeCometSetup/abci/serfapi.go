@@ -32,7 +32,7 @@ func StartHTTPServer(ctx context.Context, listenAddr string, rpcAddr string) err
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, members)
+		WriteJSON(w, members)
 	})
 
 	mux.HandleFunc("/updatetags", func(w http.ResponseWriter, r *http.Request) {
@@ -120,7 +120,7 @@ func StartHTTPServer(ctx context.Context, listenAddr string, rpcAddr string) err
 	}
 }
 
-func writeJSON(w http.ResponseWriter, v interface{}) {
+func WriteJSON(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
 }
