@@ -64,8 +64,16 @@ reset_cometbft() {
     echo "[7] Verifying logs..."
     docker exec "$container" tail -n 20 /root/logs/abci.log
     docker exec "$container" tail -n 20 /root/logs/cometbft.log
-    docker exec -d "$container" bash -c "cd /root/cometclient && nohup python3 tx_api.py > /root/logs/tx_api.log 2>&1 &"
-
+    tx_pid=$(docker exec "$container" pgrep -f "python3 tx_api.py")
+        if [[ -n "$tx_pid" ]]; then
+          docker exec "$container" kill -9 $tx_pid
+          sleep 1
+        else
+          echo "Python Tx API not running"
+        fi
+    if (( (i >= 0 && i < 6) || (i >= 12 && i < 17) )); then
+      docker exec -d "$container" bash -c "cd /root/cometclient && nohup python3 tx_api.py > /root/logs/tx_api.log 2>&1 &"
+    fi
     echo "✔ Done with $container"
   done
 }

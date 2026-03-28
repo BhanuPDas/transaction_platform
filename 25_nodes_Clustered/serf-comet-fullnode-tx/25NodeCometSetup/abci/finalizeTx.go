@@ -79,6 +79,10 @@ func (app *MyApp) ExecuteTx(req *types.FinalizeBlockRequest, decodedStrTx []byte
 	if err != nil {
 		app.logger.Error(fmt.Sprintf("ABCI ERROR: Failed to compute end time: %v", err))
 		app.logger.Error(fmt.Sprintf("Invalid time format: %v", err))
+		txResults = append(txResults, &types.ExecTxResult{
+			Code: 3,
+			Log:  fmt.Sprintf("Invalid tx_start_ts: %v", err),
+		})
 		return
 	}
 	app.logger.Info(fmt.Sprintf("Transaction %s started at %s and will finish at %s", txHash, startTime, endTime))
@@ -154,6 +158,9 @@ func (app *MyApp) ExecuteTx(req *types.FinalizeBlockRequest, decodedStrTx []byte
 }
 
 func ComputeEndTime(tx TransferTransaction) (time.Time, time.Time, error) {
+	if tx.TxStartTs == "" {
+		return time.Time{}, time.Time{}, fmt.Errorf("tx_start_ts is empty")
+	}
 	startTime, err := time.Parse(time.RFC3339Nano, tx.TxStartTs)
 	if err != nil {
 		return time.Time{}, time.Time{}, err
