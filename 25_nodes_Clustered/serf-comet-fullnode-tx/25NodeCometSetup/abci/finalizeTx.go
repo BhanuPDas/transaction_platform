@@ -119,10 +119,11 @@ func (app *MyApp) ExecuteTx(req *types.FinalizeBlockRequest, decodedStrTx []byte
 		status = StatusCompleted
 	}
 	txDetails := TxDetails{
-		Status: status,
-		TxHash: txHash,
-		TxObj:  tx,
-		Log:    "Processing Transaction",
+		Status:    status,
+		TxHash:    txHash,
+		TxObj:     tx,
+		TxEndUnix: endTime.Unix(),
+		Log:       "Processing Transaction",
 	}
 	if status == StatusCompleted {
 		txDetails.TxEndTs = now.Format(time.RFC3339Nano)

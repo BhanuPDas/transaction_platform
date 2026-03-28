@@ -143,7 +143,6 @@ func (app *MyApp) SaveTx(txHash string, txDetails TxDetails, endTime time.Time) 
 
 func (app *MyApp) ProcessExpiredTxs(req *types.FinalizeBlockRequest) {
 	now := req.Time.UTC()
-	currentBucket := getBucket(now)
 	var keysToDelete [][]byte
 	iter, err := app.state.DB.NewIter(&pebble.IterOptions{
 		LowerBound: []byte("bucket:"),
@@ -166,14 +165,7 @@ func (app *MyApp) ProcessExpiredTxs(req *types.FinalizeBlockRequest) {
 		if len(parts) != 3 {
 			continue
 		}
-		bucketTs := parts[1]
 		txHash := parts[2]
-
-		// Only process expired buckets
-		if bucketTs > currentBucket {
-			continue
-		}
-
 		// Fetch transaction
 		txKey := "tx:" + txHash
 		val, closer, err := app.state.DB.Get([]byte(txKey))
@@ -194,13 +186,10 @@ func (app *MyApp) ProcessExpiredTxs(req *types.FinalizeBlockRequest) {
 			continue
 		}
 
-		// Recompute end time
-		_, endTime, err := ComputeEndTime(txDetails.TxObj)
-		if err != nil {
-			continue
-		}
-
-		if now.After(endTime) {
+		if now.Unix() >= txDetails.TxEndUnix {
+			app.logger.Info("EXPIRING TX", "txHash", txDetails.TxHash,
+				"now", now.Unix(), "end", txDetails.TxEndUnix,
+			)
 			txDetails.Status = StatusCompleted
 			txDetails.TxEndTs = now.Format(time.RFC3339Nano)
 			txDetails.Log = "Transaction Completed"

@@ -53,9 +53,10 @@ type MyApp struct {
 }
 
 type TxDetails struct {
-	Status  string
-	TxHash  string
-	TxEndTs string
-	TxObj   TransferTransaction
-	Log     string
+	Status    string
+	TxHash    string
+	TxEndUnix int64
+	TxEndTs   string
+	TxObj     TransferTransaction
+	Log       string
 }
