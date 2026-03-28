@@ -196,13 +196,13 @@ export default function TradingForm({ onCheckBalance }) {
     let score = 0.0;
     if (bestSeller) {
       if (formData.resourceType === 'RAM')
-        score = parseFloat(bestSeller.score_ram ?? bestSeller.ram ?? 0);
+        score = parseFloat(bestSeller.score_per_ram ?? 0.0);
       else if (formData.resourceType === 'vCPU')
-        score = parseFloat(bestSeller.score_cpu ?? bestSeller.cpu ?? 0);
+        score = parseFloat(bestSeller.score_per_cpu ?? 0.0);
       else if (formData.resourceType === 'vGPU')
-        score = parseFloat(bestSeller.score_gpu ?? bestSeller.gpu ?? 0);
+        score = parseFloat(bestSeller.score_per_gpu ?? 0.0);
       else if (formData.resourceType === 'Storage')
-        score = parseFloat(bestSeller.score_storage ?? bestSeller.storage ?? 0);
+        score = parseFloat(bestSeller.score_per_storage ?? 0.0);
     }
 
     // Strip the display-only '€' prefix to get raw integer amount

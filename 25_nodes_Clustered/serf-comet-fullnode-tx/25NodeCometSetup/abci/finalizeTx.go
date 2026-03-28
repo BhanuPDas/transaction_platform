@@ -38,7 +38,7 @@ func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockReque
 			continue
 		}
 		if meta.Type == TransferType {
-			result := app.ExecuteTx(req, decodedStrTx)
+			result := app.ExecuteTx(decodedStrTx)
 			txResults = append(txResults, result)
 		} else if meta.Type == AddValidatorType || meta.Type == RemoveValidatorType || meta.Type == UpdateValidatorType {
 			var vtx Validators
@@ -56,8 +56,7 @@ func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockReque
 	return &types.FinalizeBlockResponse{TxResults: txResults, AppHash: app.state.Hash(), ValidatorUpdates: app.valUpdates}, nil
 }
 
-func (app *MyApp) ExecuteTx(req *types.FinalizeBlockRequest, decodedStrTx []byte) *types.ExecTxResult {
-	now := req.Time.UTC()
+func (app *MyApp) ExecuteTx(decodedStrTx []byte) *types.ExecTxResult {
 	var tx TransferTransaction
 	if err := json.Unmarshal(decodedStrTx, &tx); err != nil {
 		return &types.ExecTxResult{Code: 2, Log: "Bad JSON"}
@@ -114,20 +113,12 @@ func (app *MyApp) ExecuteTx(req *types.FinalizeBlockRequest, decodedStrTx []byte
 	if !fromExists && !toExists {
 		return &types.ExecTxResult{Code: 8, Log: "transaction not relevant to this cluster"}
 	}
-	status := StatusOnGoing
-	if now.After(endTime) {
-		status = StatusCompleted
-	}
 	txDetails := TxDetails{
-		Status:    status,
+		Status:    StatusOnGoing,
 		TxHash:    txHash,
 		TxObj:     tx,
 		TxEndUnix: endTime.Unix(),
 		Log:       "Processing Transaction",
-	}
-	if status == StatusCompleted {
-		txDetails.TxEndTs = now.Format(time.RFC3339Nano)
-		txDetails.Log = "Transaction Completed"
 	}
 	app.SaveTx(txHash, txDetails, endTime)
 	app.state.Size++
