@@ -116,7 +116,7 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte) *types.ExecTxResult {
 	txDetails := TxDetails{
 		Status:    StatusOnGoing,
 		TxHash:    txHash,
-		TxObj:     tx,
+		Tx:        tx,
 		TxEndUnix: endTime.Unix(),
 		Log:       "Processing Transaction",
 	}

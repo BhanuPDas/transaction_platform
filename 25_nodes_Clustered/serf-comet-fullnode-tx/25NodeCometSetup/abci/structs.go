@@ -57,6 +57,6 @@ type TxDetails struct {
 	TxHash    string
 	TxEndUnix int64
 	TxEndTs   string
-	TxObj     TransferTransaction
+	Tx        TransferTransaction
 	Log       string
 }
