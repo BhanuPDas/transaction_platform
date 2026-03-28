@@ -143,10 +143,9 @@ func (app *MyApp) SaveTx(txHash string, txDetails TxDetails, endTime time.Time) 
 
 func (app *MyApp) ProcessExpiredTxs(req *types.FinalizeBlockRequest) {
 	now := req.Time.UTC()
-	var keysToDelete [][]byte
 	iter, err := app.state.DB.NewIter(&pebble.IterOptions{
-		LowerBound: []byte("bucket:"),
-		UpperBound: []byte("bucket~"),
+		LowerBound: []byte("tx:"),
+		UpperBound: []byte("tx~"),
 	})
 	if err != nil {
 		panic(err)
@@ -159,30 +158,19 @@ func (app *MyApp) ProcessExpiredTxs(req *types.FinalizeBlockRequest) {
 	}(iter)
 
 	for iter.First(); iter.Valid(); iter.Next() {
-		keyBytes := append([]byte{}, iter.Key()...)
-		key := string(keyBytes)
-		parts := strings.Split(key, ":")
-		if len(parts) != 3 {
-			continue
-		}
-		txHash := parts[2]
-		// Fetch transaction
-		txKey := "tx:" + txHash
-		val, closer, err := app.state.DB.Get([]byte(txKey))
+		key := string(iter.Key())
+		val, err := iter.ValueAndErr()
 		if err != nil {
-			app.logger.Error(fmt.Sprintf("Transaction Key %s Not found: %v", txKey, err))
 			continue
 		}
-		_ = closer.Close()
-
+		valBytes := append([]byte{}, val...)
 		var txDetails TxDetails
-		if err := json.Unmarshal(val, &txDetails); err != nil {
+		if err := json.Unmarshal(valBytes, &txDetails); err != nil {
 			continue
 		}
 
 		// Already completed → skip
 		if txDetails.Status == StatusCompleted {
-			keysToDelete = append(keysToDelete, keyBytes)
 			continue
 		}
 
@@ -194,15 +182,9 @@ func (app *MyApp) ProcessExpiredTxs(req *types.FinalizeBlockRequest) {
 			txDetails.TxEndTs = now.Format(time.RFC3339Nano)
 			txDetails.Log = "Transaction Completed"
 			updatedBytes, _ := json.Marshal(txDetails)
-			if err := app.state.DB.Set([]byte(txKey), updatedBytes, pebble.Sync); err != nil {
+			if err := app.state.DB.Set([]byte(key), updatedBytes, pebble.Sync); err != nil {
 				app.logger.Error(fmt.Sprintf("Failed to update tx: %v", err))
 			}
-			keysToDelete = append(keysToDelete, keyBytes)
-		}
-	}
-	for _, key := range keysToDelete {
-		if err := app.state.DB.Delete(key, pebble.Sync); err != nil {
-			app.logger.Error(fmt.Sprintf("Failed to delete key: %v", err))
 		}
 	}
 	if err := iter.Error(); err != nil {
