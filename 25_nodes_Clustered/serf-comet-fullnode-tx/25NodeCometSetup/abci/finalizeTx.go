@@ -38,7 +38,8 @@ func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockReque
 			continue
 		}
 		if meta.Type == TransferType {
-			app.ExecuteTx(req, decodedStrTx, txResults)
+			result := app.ExecuteTx(req, decodedStrTx)
+			txResults = append(txResults, result)
 		} else if meta.Type == AddValidatorType || meta.Type == RemoveValidatorType || meta.Type == UpdateValidatorType {
 			var vtx Validators
 			if err := json.Unmarshal(decodedStrTx, &vtx); err != nil {
@@ -55,12 +56,11 @@ func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockReque
 	return &types.FinalizeBlockResponse{TxResults: txResults, AppHash: app.state.Hash(), ValidatorUpdates: app.valUpdates}, nil
 }
 
-func (app *MyApp) ExecuteTx(req *types.FinalizeBlockRequest, decodedStrTx []byte, txResults []*types.ExecTxResult) {
+func (app *MyApp) ExecuteTx(req *types.FinalizeBlockRequest, decodedStrTx []byte) *types.ExecTxResult {
 	now := req.Time.UTC()
 	var tx TransferTransaction
 	if err := json.Unmarshal(decodedStrTx, &tx); err != nil {
-		txResults = append(txResults, &types.ExecTxResult{Code: 2, Log: "Bad JSON"})
-		return
+		return &types.ExecTxResult{Code: 2, Log: "Bad JSON"}
 	}
 	txHash := GenerateTxHash(decodedStrTx)
 	txKey := "tx:" + txHash
@@ -69,21 +69,13 @@ func (app *MyApp) ExecuteTx(req *types.FinalizeBlockRequest, decodedStrTx []byte
 		_ = closer.Close()
 		app.logger.Info("Duplicate transaction detected, skipping", "txHash", txHash)
 
-		txResults = append(txResults, &types.ExecTxResult{
-			Code: CodeTypeOK,
-			Log:  "Duplicate tx skipped",
-		})
-		return
+		return &types.ExecTxResult{Code: CodeTypeOK, Log: "Duplicate tx skipped"}
 	}
 	startTime, endTime, err := ComputeEndTime(tx)
 	if err != nil {
 		app.logger.Error(fmt.Sprintf("ABCI ERROR: Failed to compute end time: %v", err))
 		app.logger.Error(fmt.Sprintf("Invalid time format: %v", err))
-		txResults = append(txResults, &types.ExecTxResult{
-			Code: 3,
-			Log:  fmt.Sprintf("Invalid tx_start_ts: %v", err),
-		})
-		return
+		return &types.ExecTxResult{Code: 3, Log: fmt.Sprintf("Invalid tx_start_ts: %v", err)}
 	}
 	app.logger.Info(fmt.Sprintf("Transaction %s started at %s and will finish at %s", txHash, startTime, endTime))
 
@@ -92,22 +84,14 @@ func (app *MyApp) ExecuteTx(req *types.FinalizeBlockRequest, decodedStrTx []byte
 	var events []types.Event
 	if fromExists && toExists {
 		if fromBalance < tx.Amount {
-			txResults = append(txResults, &types.ExecTxResult{
-				Code: 7,
-				Log:  "Insufficient funds",
-			})
-			return
+			return &types.ExecTxResult{Code: 7, Log: "Insufficient funds"}
 		}
 		app.state.Ledger[tx.Buyer] -= tx.Amount
 		app.state.Ledger[tx.Seller] += tx.Amount
 	}
 	if fromExists && !toExists {
 		if fromBalance < tx.Amount {
-			txResults = append(txResults, &types.ExecTxResult{
-				Code: 7,
-				Log:  "Insufficient funds",
-			})
-			return
+			return &types.ExecTxResult{Code: 7, Log: "Insufficient funds"}
 		}
 		app.state.Ledger[tx.Buyer] -= tx.Amount
 		events = []types.Event{
@@ -128,11 +112,7 @@ func (app *MyApp) ExecuteTx(req *types.FinalizeBlockRequest, decodedStrTx []byte
 		app.state.Ledger[tx.Seller] += tx.Amount
 	}
 	if !fromExists && !toExists {
-		txResults = append(txResults, &types.ExecTxResult{
-			Code: 8,
-			Log:  "transaction not relevant to this cluster",
-		})
-		return
+		return &types.ExecTxResult{Code: 8, Log: "transaction not relevant to this cluster"}
 	}
 	status := StatusOnGoing
 	if now.After(endTime) {
@@ -149,12 +129,8 @@ func (app *MyApp) ExecuteTx(req *types.FinalizeBlockRequest, decodedStrTx []byte
 		txDetails.Log = "Transaction Completed"
 	}
 	app.SaveTx(txHash, txDetails, endTime)
-	txResults = append(txResults, &types.ExecTxResult{
-		Code:   CodeTypeOK,
-		Log:    "Executed",
-		Events: events,
-	})
 	app.state.Size++
+	return &types.ExecTxResult{Code: CodeTypeOK, Log: "Executed", Events: events}
 }
 
 func ComputeEndTime(tx TransferTransaction) (time.Time, time.Time, error) {
