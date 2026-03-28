@@ -1,6 +1,6 @@
 import requests
 import json
-import datetime
+from datetime import datetime, timezone
 import logging
 import transactions
 import trigger_liqo
@@ -82,7 +82,7 @@ def get_transaction():
         quantity = data.get("quantity")
         price = data.get("price")
         lease_duration = data.get("lease_duration")
-        tx_start_ts = datetime.datetime.now().isoformat()
+        tx_start_ts = datetime.now(timezone.utc).isoformat()
         seller_energy = 0.0
         logger.info(f"Received transaction request between BUYER: {buyer_name} and SELLER: {seller}")
         transactions.check_comet_status()
