@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 const CLUSTERS = ['Cluster A', 'Cluster B'];
 const RESOURCE_TYPES = ['vCPU', 'vGPU', 'Storage', 'RAM'];
 
-export default function TradingForm({ onCheckBalance }) {
+export default function TradingForm({ onCheckBalance, onShowTransactions }) {
   const [formData, setFormData] = useState({
     cluster: '',
     buyer: '',
@@ -240,17 +240,23 @@ export default function TradingForm({ onCheckBalance }) {
 
       if (response.ok) {
         const result = await response.json().catch(() => ({}));
-        setTxStatus('success');
-        setTxMessage(result.message || 'Transaction successfully submitted to the blockchain network!');
+        setTimeout(() => {
+          setTxStatus('success');
+          setTxMessage(result.message || 'Transaction successfully submitted to the blockchain network!');
+        }, 1000);
       } else {
         const errData = await response.json().catch(() => ({}));
-        setTxStatus('error');
-        setTxMessage(errData.error || `Request failed with status ${response.status}`);
+        setTimeout(() => {
+          setTxStatus('error');
+          setTxMessage(errData.error || `Request failed with status ${response.status}`);
+        }, 1000);
       }
     } catch (err) {
       console.error('initiate_tx error:', err);
-      setTxStatus('error');
-      setTxMessage('Network error: could not reach the buyer container.');
+      setTimeout(() => {
+        setTxStatus('error');
+        setTxMessage('Network error: could not reach the buyer container.');
+      }, 1000);
     }
   };
 
@@ -262,6 +268,16 @@ export default function TradingForm({ onCheckBalance }) {
     const addr = `clab-century-${formData.buyer}`;
     if (onCheckBalance) {
       onCheckBalance(addr);
+    }
+  };
+
+  const handleShowTransactions = () => {
+    if (!formData.buyer) {
+      alert("Please select a buyer node first to view their transaction records.");
+      return;
+    }
+    if (onShowTransactions) {
+      onShowTransactions(formData.buyer);
     }
   };
 
@@ -359,12 +375,33 @@ export default function TradingForm({ onCheckBalance }) {
           {errors.leaseDuration && <span className="error-message">{errors.leaseDuration}</span>}
         </div>
 
-        <div className="form-group full-width" style={{ display: 'flex', gap: '1rem' }}>
+        <div className="form-group full-width" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           <button type="submit" className="btn-primary" disabled={txStatus === 'loading'}>
-            {txStatus === 'loading' ? 'Submitting…' : 'Initiate Smart Contract'}
+            {txStatus === 'loading' ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem' }}>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18" height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{ animation: 'spin-ring 0.75s linear infinite', flexShrink: 0 }}
+                >
+                  <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5" fill="none" />
+                  <path d="M12 2 a10 10 0 0 1 10 10" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+                </svg>
+                Submitting…
+              </span>
+            ) : 'Initiate Smart Contract'}
           </button>
           <button type="button" className="btn-primary" onClick={handleCheckBalance} style={{ backgroundColor: '#28a745' }}>
             Check Ledger Balance
+          </button>
+          <button type="button" className="btn-primary" onClick={handleShowTransactions} style={{ backgroundColor: '#7c3aed' }}>
+            Show Transaction Records
           </button>
         </div>
 

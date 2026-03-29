@@ -67,6 +67,7 @@ h1 {
   background: linear-gradient(135deg, #a8a8ff 0%, #ff8cff 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 p.subtitle {
@@ -154,4 +155,10 @@ input:disabled, select:disabled {
 
 .btn-primary:active {
   transform: translateY(0);
+}
+
+/* Spinner animation used inside the submit button */
+@keyframes spin-ring {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }

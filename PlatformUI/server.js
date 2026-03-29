@@ -99,6 +99,26 @@ app.use('/api/ledger', createProxyMiddleware({
   }
 }));
 
+// Proxy Transaction Records requests per buyer node
+app.use('/api/tx_records', createProxyMiddleware({
+  target: 'http://localhost:26657',
+  router: (req) => {
+    const buyer = req.query.targetBuyer;
+    if (!buyer) return 'http://localhost:26657';
+    return `http://clab-century-${buyer.split(':')[0]}:26657`;
+  },
+  changeOrigin: true,
+  pathRewrite: (path, req) => {
+    const newPath = '/abci_query?data=%22tx%22';
+    console.log(`[TxRecords Proxy] Forwarding to: ${newPath} for buyer ${req.query.targetBuyer}`);
+    return newPath;
+  },
+  onError: (err, req, res) => {
+    console.error('[TxRecords Proxy Error]:', err);
+    res.status(502).json({ error: 'Proxy could not reach the buyer container.' });
+  }
+}));
+
 // Serve static files from the Vite build output directory
 const distPath = join(__dirname, 'dist');
 app.use(express.static(distPath));
