@@ -28,33 +28,6 @@ app.use('/api/clusterB', createProxyMiddleware({
   pathRewrite: { '^/api/clusterB': '' }
 }));
 
-// Proxy dynamic Hilbert requests based on node address
-app.use('/api/hilbert', createProxyMiddleware({
-  target: 'http://localhost:4041', // Placeholder
-  router: (req) => {
-    const targetAddr = req.query.targetAddr;
-    if (targetAddr) {
-      // Strips ports if accidentally passed
-      const host = targetAddr.split(':')[0];
-      return `http://${host}:4041`;
-    }
-  },
-  changeOrigin: true,
-  // This function is the "Magic Bullet"
-  // It ignores the original path/query and forces ONLY the correct string
-  pathRewrite: (path, req) => {
-    console.log(`[Proxy] Cleaning path for ${req.query.targetAddr}`);
-    return '/hilbert-output';
-  },
-  onProxyRes: (proxyRes, req, res) => {
-    console.log(`[Target Response] Status: ${proxyRes.statusCode} from ${req.query.targetAddr}`);
-  },
-  onError: (err, req, res) => {
-    console.error('[Proxy Error]:', err);
-    res.status(502).send('Proxy could not reach the backend container.');
-  }
-}));
-
 // Proxy Smart Contract initiate_tx POST to the buyer's container
 app.use('/api/initiate_tx', createProxyMiddleware({
   target: 'http://localhost:5000', // placeholder, overridden by router

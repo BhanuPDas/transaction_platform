@@ -5,6 +5,7 @@ import logging
 import transactions
 import trigger_liqo
 from flask import Flask, request, jsonify
+import sellers_discovery
 
 # --- Configuration ---
 SERF_URL = "http://127.0.0.1:5555"
@@ -64,44 +65,69 @@ def get_nodeip_and_bftaddr(buyer_node: str):
 def get_transaction():
     try:
         data = request.get_json(silent=True)
-        if not data or not data.get("buyer") or not data.get("seller") or not data.get("seller_ip") or not data.get(
-                "buyer_ip"):
-            logger.info(f"Invalid request received: {data}")
+        logger.info(f"Received request: {data}")
+        if not data:
+            logger.info("Empty or malformed JSON received")
             return jsonify({"error": "Invalid request received"}), 400
-        buyer_name = data.get("buyer")
-        seller = data.get("seller")
-        buyer_ip_addr = data.get("buyer_ip")
-        seller_ip = data.get("seller_ip")
-        cpu = data.get("cpu")
-        ram = data.get("ram")
-        storage = data.get("storage")
-        gpu = data.get("gpu")
-        resource_type = data.get("resource_type")
-        amount = data.get("amount")
-        score = data.get("score")
-        quantity = data.get("quantity")
-        price = data.get("price")
+        ip = data.get("ip")
         lease_duration = data.get("lease_duration")
+        resources = data.get("resources")
+
+        if not ip or not lease_duration or not resources:
+            logger.info(f"Missing required fields in request: {data}")
+            return jsonify({"error": "Invalid request received"}), 400
+
+        # Optional: validate that at least one resource has non-zero demand
+        active_resources = {
+            k: v for k, v in resources.items()
+            if v.get("demand_per_unit", 0) > 0
+        }
+        if not active_resources:
+            logger.info(f"No active resource demands in request: {data}")
+            return jsonify({"error": "At least one resource must have demand_per_unit > 0"}), 400
+
+        sellers_discovery.notify_buyer(ip=ip, resources=resources)
+        discovered = sellers_discovery.find_sellers()
         tx_start_ts = datetime.now(timezone.utc).isoformat()
-        seller_energy = 0.0
-        logger.info(f"Received transaction request between BUYER: {buyer_name} and SELLER: {seller}")
-        transactions.check_comet_status()
-        logger.info(f"Preparing payload for transaction..")
-        tx_payload = transactions.create_tx_payload(buyer_name, seller, amount, quantity, score, price, resource_type,
-                                                    tx_start_ts, lease_duration, seller_energy)
+        empty_seller = sellers_discovery.create_empty_sellers()
+        if not discovered:
+            logger.info("No sellers discovered, proceeding with empty seller")
+            seller_obj = empty_seller
+            amount = 0
+        else:
+            api_data = discovered.get("results")
+            seller_rec = sellers_discovery.select_seller(resources, api_data)
+            amount = seller_rec.get("amount")
+            raw_seller = seller_rec.get("seller")
+            logger.info(f"Selected seller: {seller_rec}")
+            seller_obj = sellers_discovery.create_seller(raw_seller)
+            logger.info(f"Received transaction request — BUYER: {buyer}, SELLER: {seller_obj['name'] or 'none'}")
+            transactions.check_comet_status()
+            logger.info("Preparing payload for transaction...")
+        buyer_obj = {
+            "name": buyer,
+            "ip": ip,
+            "resource": resources
+        }
+
+        tx_payload = transactions.create_tx_payload(buyer=buyer_obj,
+                                                    seller=seller_obj,
+                                                    amount=amount,
+                                                    tx_start_ts=tx_start_ts,
+                                                    lease_duration=lease_duration
+                                                    )
+
         tx_hash = transactions.broadcast_transaction(tx_payload)
-        logger.info(f"Broadcast Hash received from cometbft: {tx_hash}")
         if tx_hash:
-            trigger_liqo.publish_redis(buyer_name, buyer_ip_addr, seller, seller_ip, cpu, ram, storage, gpu, amount, score,
-                                       quantity, price, lease_duration, tx_start_ts, seller_energy, resource_type)
+            trigger_liqo.publish_redis(buyer_obj, seller_obj, amount, tx_start_ts, lease_duration)
             return jsonify({"status": "success", "message": f"Resource Trade initiated: {tx_hash}"}), 200
         else:
             return jsonify({"status": "error", "message": "Error Occured in Transaction. Try Again"}), 400
+
     except CometNotReadyError as e:
         logger.error(str(e))
     except Exception as exc:
         logger.error(f"Unexpected error: {exc}")
-
 
 if __name__ == "__main__":
     try:

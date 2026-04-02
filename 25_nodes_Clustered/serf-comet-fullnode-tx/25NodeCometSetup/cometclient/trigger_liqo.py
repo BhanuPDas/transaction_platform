@@ -11,27 +11,15 @@ rd = redis.Redis(host='localhost', port=6379, decode_responses=True)
 channel = "liqo:initiate"
 
 
-def publish_redis(buyer, buyer_ip, seller, seller_ip, cpu, ram, storage, gpu, amount, score,
-                  quantity, price, lease_duration, tx_start_ts, seller_energy, resource_type):
+def publish_redis(buyer_obj, seller_obj, amount, tx_start_ts, lease_duration):
     logger.info("Preparing records to publish to redis..")
     tx = {
         "type": "transfer",
-        "buyer": buyer,
-        "buyer_ip": buyer_ip,
-        "seller": seller,
-        "seller_ip": seller_ip,
-        "cpu": cpu,
-        "ram": ram,
-        "storage": storage,
-        "gpu": gpu,
+        "buyer": buyer_obj,
+        "seller": seller_obj,
         "amount": amount,
-        "quantity": quantity,
         "tx_start_ts": tx_start_ts,
-        "seller_energy": seller_energy,
-        "resource_type": resource_type,
-        "score": score,
-        "lease_duration": lease_duration,
-        "price": price
+        "lease_duration": lease_duration
     }
     try:
         msg = json.dumps(tx)

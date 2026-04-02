@@ -26,7 +26,7 @@
   flex-direction: row;
   justify-content: space-evenly;
   align-items: flex-end;
-  gap: 0.4rem;
+  gap: 0.5rem;
   height: 300px;
   width: 100%;
   overflow: hidden;
@@ -36,7 +36,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.rem;
   flex: 1 1 0;
   min-width: 0;
   height: 100%;
@@ -76,7 +76,7 @@
   padding-top: 12px;
   background: linear-gradient(0deg, #10b981 0%, #34d399 100%);
   box-shadow: 0 0 15px rgba(52, 211, 153, 0.4);
-  
+
   /* Initial state for animation */
   height: 0;
   transform-origin: bottom;
@@ -84,12 +84,13 @@
 }
 
 .bar-value {
-  color: #064e3b; /* Dark text for contrast against green */
+  color: #064e3b;
+  /* Dark text for contrast against green */
   font-weight: 700;
   font-size: 0.9rem;
   opacity: 0;
   animation: fadeIn 0.5s ease 0.8s forwards;
-  text-shadow: 0px 0px 4px rgba(255,255,255,0.4);
+  text-shadow: 0px 0px 4px rgba(255, 255, 255, 0.4);
 }
 
 .ledger-actions {
@@ -159,15 +160,29 @@
 
 /* Animations */
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes growBarUp {
-  from { transform: scaleY(0); }
-  to { transform: scaleY(1); }
+  from {
+    transform: scaleY(0);
+  }
+
+  to {
+    transform: scaleY(1);
+  }
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

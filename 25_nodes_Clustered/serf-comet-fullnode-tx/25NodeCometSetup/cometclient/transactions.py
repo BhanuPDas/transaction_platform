@@ -18,23 +18,15 @@ class CometNotReadyError(Exception):
     pass
 
 
-def create_tx_payload(buyer, seller, amount, quantity, score, price, resource_type, tx_start_ts, lease_duration,
-                      seller_energy):
-    """
-    Creates the JSON payload for our transaction.
-    """
+def create_tx_payload(buyer, seller, amount, tx_start_ts, lease_duration):
     tx = {
         "type": "transfer",
         "buyer": buyer,
         "seller": seller,
         "amount": amount,
-        "quantity": quantity,
-        "score": score,
-        "price": price,
-        "resource_type": resource_type,
         "tx_start_ts": tx_start_ts,
         "lease_duration": lease_duration,
-        "seller_energy": seller_energy
+        "seller_energy": 0.0
     }
     logger.info(f"Prepared transaction: {json.dumps(tx)}")
     return tx

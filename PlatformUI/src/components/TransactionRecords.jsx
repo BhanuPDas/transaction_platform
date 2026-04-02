@@ -40,6 +40,9 @@ export default function TransactionRecords({ buyerName, onBack }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const PAGE_SIZE = 10;
 
   useEffect(() => {
     const fetchData = async () => {
@@ -66,6 +69,7 @@ export default function TransactionRecords({ buyerName, onBack }) {
         // Newest first: sort by TxEndUnix descending (OnGoing = 0 → top)
         records.sort((a, b) => (b.TxEndUnix || 0) - (a.TxEndUnix || 0));
         setData(records);
+        setCurrentPage(1); // reset to first page on fresh fetch
       } catch (err) {
         console.error('Failed to fetch transaction records', err);
         setError(err.message);
@@ -109,104 +113,142 @@ export default function TransactionRecords({ buyerName, onBack }) {
         <div className="tx-empty-state">
           <p>No transaction records found for this node.</p>
         </div>
-      ) : (
-        <div className="tx-list">
-          {data.map((record, i) => {
-            const tx = record.TxObj ?? record.Tx ?? {};
-            const sc = statusClass(record.Status);
+      ) : (() => {
+          const totalPages = Math.ceil(data.length / PAGE_SIZE);
+          const startIdx   = (currentPage - 1) * PAGE_SIZE;
+          const pageData   = data.slice(startIdx, startIdx + PAGE_SIZE);
 
-            return (
-              <div className={`tx-card status-${sc}`} key={record.TxHash || i}>
+          return (
+            <>
+              <div className="tx-list">
+                {pageData.map((record, i) => {
+                  const tx = record.TxObj ?? record.Tx ?? {};
+                  const sc = statusClass(record.Status);
 
-                {/* ── Card header ── */}
-                <div className="tx-card-header">
-                  <div className="tx-hash-group">
-                    <span className="tx-hash-label">Tx Hash</span>
-                    <span className="tx-hash-value">{record.TxHash || '—'}</span>
-                  </div>
-                  <StatusBadge status={record.Status} />
-                </div>
+                  return (
+                    <div className={`tx-card status-${sc}`} key={record.TxHash || i}>
 
-                {/* ── Detail grid ── */}
-                <div className="tx-details-grid">
+                      {/* ── Card header ── */}
+                      <div className="tx-card-header">
+                        <div className="tx-hash-group">
+                          <span className="tx-hash-label">Tx Hash</span>
+                          <span className="tx-hash-value">{record.TxHash || '—'}</span>
+                        </div>
+                        <StatusBadge status={record.Status} />
+                      </div>
 
-                  {/* Parties */}
-                  <div className="tx-detail-item">
-                    <span className="tx-detail-label">Buyer</span>
-                    <span className="tx-detail-value highlight">{tx.buyer || '—'}</span>
-                  </div>
-                  <div className="tx-detail-item">
-                    <span className="tx-detail-label">Seller</span>
-                    <span className="tx-detail-value highlight">{tx.seller || '—'}</span>
-                  </div>
+                      {/* ── Detail grid ── */}
+                      <div className="tx-details-grid">
 
-                  {/* Resource */}
-                  <div className="tx-detail-item">
-                    <span className="tx-detail-label">Resource Type</span>
-                    <span className="tx-detail-value">{tx.resource_type || '—'}</span>
-                  </div>
-                  <div className="tx-detail-item">
-                    <span className="tx-detail-label">Quantity</span>
-                    <span className="tx-detail-value">{tx.quantity ?? '—'}</span>
-                  </div>
+                        {/* Parties */}
+                        <div className="tx-detail-item">
+                          <span className="tx-detail-label">Buyer</span>
+                          <span className="tx-detail-value highlight">{tx.buyer || '—'}</span>
+                        </div>
+                        <div className="tx-detail-item">
+                          <span className="tx-detail-label">Seller</span>
+                          <span className="tx-detail-value highlight">{tx.seller || '—'}</span>
+                        </div>
 
-                  {/* Financials */}
-                  <div className="tx-detail-item">
-                    <span className="tx-detail-label">Amount</span>
-                    <span className="tx-detail-value green">€{tx.amount ?? '—'}</span>
-                  </div>
-                  <div className="tx-detail-item">
-                    <span className="tx-detail-label">Price / Unit</span>
-                    <span className="tx-detail-value green">€{tx.price ?? '—'}</span>
-                  </div>
+                        {/* Resource */}
+                        <div className="tx-detail-item">
+                          <span className="tx-detail-label">Resource Type</span>
+                          <span className="tx-detail-value">{tx.resource_type || '—'}</span>
+                        </div>
+                        <div className="tx-detail-item">
+                          <span className="tx-detail-label">Quantity</span>
+                          <span className="tx-detail-value">{tx.quantity ?? '—'}</span>
+                        </div>
 
-                  {/* Score */}
-                  <div className="tx-detail-item">
-                    <span className="tx-detail-label">Score</span>
-                    <span className="tx-detail-value amber">{tx.score ?? '—'}</span>
-                  </div>
+                        {/* Financials */}
+                        <div className="tx-detail-item">
+                          <span className="tx-detail-label">Amount</span>
+                          <span className="tx-detail-value green">€{tx.amount ?? '—'}</span>
+                        </div>
+                        <div className="tx-detail-item">
+                          <span className="tx-detail-label">Price / Unit</span>
+                          <span className="tx-detail-value green">€{tx.price ?? '—'}</span>
+                        </div>
 
-                  {/* Tx Type */}
-                  <div className="tx-detail-item">
-                    <span className="tx-detail-label">Type</span>
-                    <span className="tx-detail-value">{tx.type || '—'}</span>
-                  </div>
+                        {/* Score */}
+                        <div className="tx-detail-item">
+                          <span className="tx-detail-label">Score</span>
+                          <span className="tx-detail-value amber">{tx.score ?? '—'}</span>
+                        </div>
 
-                  {/* Lease duration */}
-                  <div className="tx-detail-item">
-                    <span className="tx-detail-label">Lease Duration</span>
-                    <span className="tx-detail-value">{tx.lease_duration ? `${tx.lease_duration}s` : '—'}</span>
-                  </div>
+                        {/* Tx Type */}
+                        <div className="tx-detail-item">
+                          <span className="tx-detail-label">Type</span>
+                          <span className="tx-detail-value">{tx.type || '—'}</span>
+                        </div>
 
-                  {/* Seller Energy */}
-                  <div className="tx-detail-item">
-                    <span className="tx-detail-label">Seller Energy</span>
-                    <span className="tx-detail-value">{tx.seller_energy ?? '—'}</span>
-                  </div>
+                        {/* Lease duration */}
+                        <div className="tx-detail-item">
+                          <span className="tx-detail-label">Lease Duration</span>
+                          <span className="tx-detail-value">{tx.lease_duration ? `${tx.lease_duration}s` : '—'}</span>
+                        </div>
 
-                  {/* Timestamps */}
-                  <div className="tx-detail-item">
-                    <span className="tx-detail-label">Tx Start</span>
-                    <span className="tx-detail-value">{formatTs(tx.tx_start_ts)}</span>
-                  </div>
-                  <div className="tx-detail-item">
-                    <span className="tx-detail-label">Tx End</span>
-                    <span className="tx-detail-value">{formatTs(record.TxEndTs)}</span>
-                  </div>
+                        {/* Seller Energy */}
+                        <div className="tx-detail-item">
+                          <span className="tx-detail-label">Seller Energy</span>
+                          <span className="tx-detail-value">{tx.seller_energy ?? '—'}</span>
+                        </div>
 
-                </div>
+                        {/* Timestamps */}
+                        <div className="tx-detail-item">
+                          <span className="tx-detail-label">Tx Start</span>
+                          <span className="tx-detail-value">{formatTs(tx.tx_start_ts)}</span>
+                        </div>
+                        <div className="tx-detail-item">
+                          <span className="tx-detail-label">Tx End</span>
+                          <span className="tx-detail-value">{formatTs(record.TxEndTs)}</span>
+                        </div>
 
-                {/* ── Log ── */}
-                {record.Log && (
-                  <div className="tx-log-row">
-                    📝 {record.Log}
-                  </div>
-                )}
+                      </div>
+
+                      {/* ── Log ── */}
+                      {record.Log && (
+                        <div className="tx-log-row">
+                          📝 {record.Log}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
-      )}
+
+              {/* ── Pagination Controls ── */}
+              {totalPages > 1 && (
+                <div className="tx-pagination">
+                  <button
+                    id="tx-page-prev"
+                    className="tx-page-btn"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(p => p - 1)}
+                  >
+                    ‹ Prev
+                  </button>
+
+                  <div className="tx-page-info">
+                    <span className="tx-page-current">{currentPage}</span>
+                    <span className="tx-page-sep">/</span>
+                    <span className="tx-page-total">{totalPages}</span>
+                    <span className="tx-page-records">({data.length} records)</span>
+                  </div>
+
+                  <button
+                    id="tx-page-next"
+                    className="tx-page-btn"
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(p => p + 1)}
+                  >
+                    Next ›
+                  </button>
+                </div>
+              )}
+            </>
+          );
+        })()}
 
       {/* Back action */}
       <div className="tx-actions">
