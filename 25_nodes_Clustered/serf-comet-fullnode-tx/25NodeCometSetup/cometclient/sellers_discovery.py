@@ -12,10 +12,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 RESOURCE_MAP = {
-    "vcpu":    {"price": "price_per_cpu",     "score": "score_per_cpu",     "available": "cpu"},
-    "ram":     {"price": "price_per_ram",     "score": "score_per_ram",     "available": "ram"},
+    "vcpu": {"price": "price_per_cpu", "score": "score_per_cpu", "available": "cpu"},
+    "ram": {"price": "price_per_ram", "score": "score_per_ram", "available": "ram"},
     "storage": {"price": "price_per_storage", "score": "score_per_storage", "available": "storage"},
-    "vgpu":    {"price": "price_per_gpu",     "score": "score_per_gpu",     "available": "gpu"},
+    "vgpu": {"price": "price_per_gpu", "score": "score_per_gpu", "available": "gpu"},
 }
 
 
@@ -83,7 +83,10 @@ def select_seller(resources: dict, discovery_results: list) -> dict | None:
         "amount": amount
     }
 
+
 def create_empty_sellers():
+    price, score = create_price_score(0.0, 0.0, 0.0, 0.0,
+                                      0.0, 0.0, 0.0, 0.0)
     empty_seller = {
         "name": "",
         "ip": "",
@@ -91,18 +94,17 @@ def create_empty_sellers():
         "ram": 0.0,
         "storage": 0,
         "gpu": 0,
-        "price_per_cpu": 0.0,
-        "price_per_ram": 0.0,
-        "price_per_storage": 0.0,
-        "price_per_gpu": 0.0,
-        "score_per_cpu": 0.0,
-        "score_per_ram": 0.0,
-        "score_per_storage": 0.0,
-        "score_per_gpu": 0.0,
+        "price": price,
+        "score": score
     }
     return empty_seller
 
+
 def create_seller(raw_seller):
+    price, score = create_price_score(raw_seller.get("price_per_cpu", 0.0), raw_seller.get("price_per_ram", 0.0),
+                                      raw_seller.get("price_per_storage", 0.0),raw_seller.get("price_per_gpu", 0.0),
+                                      raw_seller.get("score_per_cpu", 0.0), raw_seller.get("score_per_ram", 0.0),
+                                      raw_seller.get("score_per_storage", 0.0), raw_seller.get("score_per_gpu", 0.0))
     seller_obj = {
         "name": raw_seller.get("name", ""),
         "ip": raw_seller.get("ip", ""),
@@ -110,13 +112,24 @@ def create_seller(raw_seller):
         "ram": raw_seller.get("ram", 0.0),
         "storage": raw_seller.get("storage", 0),
         "gpu": raw_seller.get("gpu", 0),
-        "price_per_cpu": raw_seller.get("price_per_cpu", 0.0),
-        "price_per_ram": raw_seller.get("price_per_ram", 0.0),
-        "price_per_storage": raw_seller.get("price_per_storage", 0.0),
-        "price_per_gpu": raw_seller.get("price_per_gpu", 0.0),
-        "score_per_cpu": raw_seller.get("score_per_cpu", 0.0),
-        "score_per_ram": raw_seller.get("score_per_ram", 0.0),
-        "score_per_storage": raw_seller.get("score_per_storage", 0.0),
-        "score_per_gpu": raw_seller.get("score_per_gpu", 0.0),
+        "price": price,
+        "score": score
     }
     return seller_obj
+
+
+def create_price_score(price_per_cpu, price_per_ram, price_per_storage, price_per_gpu,
+                       score_per_cpu, score_per_ram, score_per_storage, score_per_gpu):
+    price = {
+        "vcpu": price_per_cpu,
+        "ram": price_per_ram,
+        "storage": price_per_storage,
+        "vgpu": price_per_gpu
+    }
+    score = {
+        "vcpu": score_per_cpu,
+        "ram": score_per_ram,
+        "storage": score_per_storage,
+        "vgpu": score_per_gpu
+    }
+    return price, score
