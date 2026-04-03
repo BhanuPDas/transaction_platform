@@ -69,7 +69,7 @@ setup_multinodes_cometbft() {
 
     # Add tags to Serf
     echo "Setting Serf Tags for $container..."
-    docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"rpc_addr\":\"$nodeId@$ip_address:26656\"}}" http://127.0.0.1:5555/updatetags
+    #docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"rpc_addr\":\"$nodeId@$ip_address:26656\"}}" http://127.0.0.1:5555/updatetags
     
     # Install Python
     echo "Installing Python..."
