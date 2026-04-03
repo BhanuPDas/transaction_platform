@@ -8,15 +8,15 @@ import (
 )
 
 func (app *MyApp) Query(_ context.Context, query *types.QueryRequest) (*types.QueryResponse, error) {
-	app.logger.Info("Executing Application Query.")
+	app.Logger.Info("Executing Application Query.")
 	resp := types.QueryResponse{Key: query.Data}
 	switch string(query.Data) {
 	case "balance":
-		resultBytes, err := json.Marshal(app.state.Ledger)
+		resultBytes, err := json.Marshal(app.State.Ledger)
 		if err != nil {
 			return nil, err
 		}
-		resp.Log = "Full ledger state"
+		resp.Log = "Full ledger State"
 		resp.Value = resultBytes
 		return &resp, nil
 	case "tx":

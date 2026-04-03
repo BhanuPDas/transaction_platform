@@ -11,7 +11,7 @@ import (
 )
 
 func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockRequest) (*types.FinalizeBlockResponse, error) {
-	app.logger.Info(fmt.Sprintf("=== [FINALIZE BLOCK START] (Block: %d) ===", req.Height))
+	app.Logger.Info(fmt.Sprintf("=== [FINALIZE BLOCK START] (Block: %d) ===", req.Height))
 	var meta struct {
 		Type string `json:"type"`
 	}
@@ -20,13 +20,13 @@ func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockReque
 	for _, txBytes := range req.Txs {
 		txStrings = append(txStrings, fmt.Sprintf("%x", txBytes))
 	}
-	app.logger.Info(fmt.Sprintf("ABCI: Processing transactions for block. Tx count: %d, Txs: %v", len(req.Txs), txStrings))
-	app.state.Height = req.Height
+	app.Logger.Info(fmt.Sprintf("ABCI: Processing transactions for block. Tx count: %d, Txs: %v", len(req.Txs), txStrings))
+	app.State.Height = req.Height
 	txResults := make([]*types.ExecTxResult, 0, len(req.Txs))
 	for _, txBytes := range req.Txs {
 		decodedStrTx, err2 := base64.StdEncoding.DecodeString(string(txBytes))
 		if err2 != nil {
-			app.logger.Error(fmt.Sprintf("ABCI ERROR: Failed to base64 decode tx: %v, Payload: %s", err2, string(txBytes)))
+			app.Logger.Error(fmt.Sprintf("ABCI ERROR: Failed to base64 decode tx: %v, Payload: %s", err2, string(txBytes)))
 			txResults = append(txResults, &types.ExecTxResult{
 				Code: 1,
 				Log:  "Failed to base64 decode tx",
@@ -38,7 +38,7 @@ func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockReque
 			continue
 		}
 		if meta.Type == TransferType {
-			result := app.ExecuteTx(decodedStrTx)
+			result := app.ExecuteTx(decodedStrTx, req)
 			txResults = append(txResults, result)
 		} else if meta.Type == AddValidatorType || meta.Type == RemoveValidatorType || meta.Type == UpdateValidatorType {
 			var vtx Validators
@@ -48,70 +48,96 @@ func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockReque
 			}
 			app.UpdateValidator(string(decodedStrTx))
 			txResults = append(txResults, &types.ExecTxResult{Code: CodeTypeOK, Log: "Validator Request Executed"})
+		} else {
+			txResults = append(txResults, &types.ExecTxResult{Code: 7, Log: "Unknown tx type"})
 		}
 	}
 	app.ProcessExpiredTxs(req)
-	app.lastBlockHeight = req.Height
-	app.logger.Info(fmt.Sprintf("=== [FINALIZE BLOCK END] (Block: %d) ===", app.lastBlockHeight))
-	return &types.FinalizeBlockResponse{TxResults: txResults, AppHash: app.state.Hash(), ValidatorUpdates: app.valUpdates}, nil
+	app.LastBlockHeight = req.Height
+	app.Logger.Info(fmt.Sprintf("=== [FINALIZE BLOCK END] (Block: %d) ===", app.LastBlockHeight))
+	return &types.FinalizeBlockResponse{TxResults: txResults, AppHash: app.State.Hash(), ValidatorUpdates: app.ValUpdates}, nil
 }
 
-func (app *MyApp) ExecuteTx(decodedStrTx []byte) *types.ExecTxResult {
+func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest) *types.ExecTxResult {
 	var tx TransferTransaction
 	if err := json.Unmarshal(decodedStrTx, &tx); err != nil {
 		return &types.ExecTxResult{Code: 2, Log: "Bad JSON"}
 	}
 	txHash := GenerateTxHash(decodedStrTx)
 	txKey := "tx:" + txHash
-	_, closer, err := app.state.DB.Get([]byte(txKey))
+	_, closer, err := app.State.DB.Get([]byte(txKey))
 	if err == nil {
 		_ = closer.Close()
-		app.logger.Info("Duplicate transaction detected, skipping", "txHash", txHash)
-
+		app.Logger.Info("Duplicate transaction detected, skipping", "txHash", txHash)
 		return &types.ExecTxResult{Code: CodeTypeOK, Log: "Duplicate tx skipped"}
 	}
 	startTime, endTime, err := ComputeEndTime(tx)
 	if err != nil {
-		app.logger.Error(fmt.Sprintf("ABCI ERROR: Failed to compute end time: %v", err))
-		app.logger.Error(fmt.Sprintf("Invalid time format: %v", err))
+		app.Logger.Error(fmt.Sprintf("ABCI ERROR: Failed to compute end time: %v", err))
+		app.Logger.Error(fmt.Sprintf("Invalid time format: %v", err))
 		return &types.ExecTxResult{Code: 3, Log: fmt.Sprintf("Invalid tx_start_ts: %v", err)}
 	}
-	app.logger.Info(fmt.Sprintf("Transaction %s started at %s and will finish at %s", txHash, startTime, endTime))
+	app.Logger.Info(fmt.Sprintf("Transaction %s started at %s and will finish at %s", txHash, startTime, endTime))
+	if tx.Seller.Name == "" {
+		txDetails := TxDetails{
+			Status:    StatusFailed,
+			TxHash:    txHash,
+			Tx:        tx,
+			TxEndUnix: endTime.Unix(),
+			TxEndTs:   (req.Time.UTC()).Format(time.RFC3339Nano),
+			Log:       "No Seller Found For The Buyer Demand",
+		}
+		app.SaveTx(txHash, txDetails, endTime)
+		return &types.ExecTxResult{Code: CodeTypeOK, Log: "Executed"}
+	}
+	hasBudget, _ := HasHighBudget(tx.Buyer, tx.Seller)
+	if !hasBudget {
+		txDetails := TxDetails{
+			Status:    StatusFailed,
+			TxHash:    txHash,
+			Tx:        tx,
+			TxEndUnix: endTime.Unix(),
+			TxEndTs:   (req.Time.UTC()).Format(time.RFC3339Nano),
+			Log:       "Buyer Has Very Low Budget For The Resources",
+		}
+		app.SaveTx(txHash, txDetails, endTime)
+		return &types.ExecTxResult{Code: CodeTypeOK, Log: "Executed"}
+	}
 
-	fromBalance, fromExists := app.state.Ledger[tx.Buyer]
-	_, toExists := app.state.Ledger[tx.Seller]
+	fromBalance, fromExists := app.State.Ledger[tx.Buyer.Name]
+	_, toExists := app.State.Ledger[tx.Seller.Name]
 	var events []types.Event
 	if fromExists && toExists {
 		if fromBalance < tx.Amount {
-			return &types.ExecTxResult{Code: 7, Log: "Insufficient funds"}
+			return &types.ExecTxResult{Code: 5, Log: "Insufficient funds"}
 		}
-		app.state.Ledger[tx.Buyer] -= tx.Amount
-		app.state.Ledger[tx.Seller] += tx.Amount
+		app.State.Ledger[tx.Buyer.Name] -= tx.Amount
+		app.State.Ledger[tx.Seller.Name] += tx.Amount
 	}
 	if fromExists && !toExists {
 		if fromBalance < tx.Amount {
-			return &types.ExecTxResult{Code: 7, Log: "Insufficient funds"}
+			return &types.ExecTxResult{Code: 5, Log: "Insufficient funds"}
 		}
-		app.state.Ledger[tx.Buyer] -= tx.Amount
+		app.State.Ledger[tx.Buyer.Name] -= tx.Amount
 		events = []types.Event{
 			{
 				Type: "relay_transfer",
 				Attributes: []types.EventAttribute{
-					{Key: "from", Value: tx.Buyer, Index: true},
-					{Key: "to", Value: tx.Seller, Index: true},
+					{Key: "from", Value: tx.Buyer.Name, Index: true},
+					{Key: "to", Value: tx.Seller.Name, Index: true},
 					{Key: "amount", Value: strconv.FormatInt(tx.Amount, 10), Index: true},
 					{Key: "timestamp", Value: tx.TxStartTs, Index: false},
 				},
 			},
 		}
 
-		app.logger.Info("Relay processing", "from", tx.Buyer, "to", tx.Seller, "fromExists", fromExists, "toExists", toExists)
+		app.Logger.Info("Relay processing", "from", tx.Buyer.Name, "to", tx.Seller.Name, "fromExists", fromExists, "toExists", toExists)
 	}
 	if !fromExists && toExists {
-		app.state.Ledger[tx.Seller] += tx.Amount
+		app.State.Ledger[tx.Seller.Name] += tx.Amount
 	}
 	if !fromExists && !toExists {
-		return &types.ExecTxResult{Code: 8, Log: "transaction not relevant to this cluster"}
+		return &types.ExecTxResult{Code: 4, Log: "transaction not relevant to this cluster"}
 	}
 	txDetails := TxDetails{
 		Status:    StatusOnGoing,
@@ -121,7 +147,7 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte) *types.ExecTxResult {
 		Log:       "Processing Transaction",
 	}
 	app.SaveTx(txHash, txDetails, endTime)
-	app.state.Size++
+	app.State.Size++
 	return &types.ExecTxResult{Code: CodeTypeOK, Log: "Executed", Events: events}
 }
 
@@ -135,4 +161,24 @@ func ComputeEndTime(tx TransferTransaction) (time.Time, time.Time, error) {
 	}
 	endTime := startTime.Add(time.Duration(tx.LeaseDuration) * time.Second)
 	return startTime, endTime, nil
+}
+
+func HasHighBudget(buyer BuyerInfo, seller SellerInfo) (bool, error) {
+	totalBudget := 0.0
+	totalPrice := 0.0
+	for resource, demand := range buyer.Resources {
+		if demand.DemandPerUnit == 0 {
+			continue
+		}
+		sellerPrice, ok := seller.Price[resource]
+		if !ok {
+			return false, fmt.Errorf("seller %s does not have pricing for resource: %s", seller.IP, resource)
+		}
+		totalBudget += demand.Budget
+		totalPrice += sellerPrice
+	}
+	if totalBudget == 0 {
+		return false, fmt.Errorf("no valid resource demand found for buyer %s", buyer.Name)
+	}
+	return totalBudget >= totalPrice, nil
 }

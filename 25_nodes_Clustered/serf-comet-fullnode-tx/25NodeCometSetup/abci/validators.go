@@ -13,19 +13,19 @@ import (
 func (app *MyApp) UpdateValidator(vReqTx string) {
 	var vtx Validators
 	if err := json.Unmarshal([]byte(vReqTx), &vtx); err != nil {
-		app.logger.Error(fmt.Sprintf("Error unmarshalling validator tx json: %v", err))
+		app.Logger.Error(fmt.Sprintf("Error unmarshalling validator tx json: %v", err))
 		return
 	}
 	tp := vtx.Type
 	for _, val := range vtx.Validator {
 		pubKeyBytes, err := base64.StdEncoding.DecodeString(val.PubKeyBytes)
 		if err != nil {
-			app.logger.Error("PubKey decode error:", "err", err)
+			app.Logger.Error("PubKey decode error:", "err", err)
 			continue
 		}
 		pubkey, err := cryptoenc.PubKeyFromTypeAndBytes(val.PubKeyType, pubKeyBytes)
 		if err != nil {
-			app.logger.Error("PubKey Error:", "err", err)
+			app.Logger.Error("PubKey Error:", "err", err)
 		}
 		addr := string(pubkey.Address())
 		switch tp {
@@ -35,16 +35,16 @@ func (app *MyApp) UpdateValidator(vReqTx string) {
 				PubKeyBytes: pubKeyBytes,
 				Power:       0,
 			}
-			if _, ok := app.valAddrToPubKeyMap[addr]; !ok {
-				app.logger.Error("Attempt to remove non-existent validator", "addr", addr)
+			if _, ok := app.ValAddrToPubKeyMap[addr]; !ok {
+				app.Logger.Error("Attempt to remove non-existent validator", "addr", addr)
 				continue
 			}
 			app.AppendValidatorUpdateOnce(addr, removeUpdate)
 			app.RemoveFromStateValidator(addr)
-			delete(app.valAddrToPubKeyMap, addr)
+			delete(app.ValAddrToPubKeyMap, addr)
 
 		case AddValidatorType, UpdateValidatorType:
-			app.valAddrToPubKeyMap[addr] = pubkey
+			app.ValAddrToPubKeyMap[addr] = pubkey
 			app.AddOrUpdateStateValidator(types.ValidatorUpdate{
 				PubKeyType:  val.PubKeyType,
 				PubKeyBytes: pubKeyBytes,
@@ -57,7 +57,7 @@ func (app *MyApp) UpdateValidator(vReqTx string) {
 			})
 
 		default:
-			app.logger.Error(fmt.Sprintf("Unknown validator update type: %s", tp))
+			app.Logger.Error(fmt.Sprintf("Unknown validator update type: %s", tp))
 			return
 		}
 	}
@@ -66,31 +66,31 @@ func (app *MyApp) UpdateValidator(vReqTx string) {
 
 func (app *MyApp) AddOrUpdateStateValidator(v types.ValidatorUpdate, addr string) {
 	// update if exists
-	for i, existing := range app.state.Validator {
+	for i, existing := range app.State.Validator {
 		pub, _ := cryptoenc.PubKeyFromTypeAndBytes(existing.PubKeyType, existing.PubKeyBytes)
 		if string(pub.Address()) == addr {
-			app.state.Validator[i] = v
+			app.State.Validator[i] = v
 			return
 		}
 	}
-	app.state.Validator = append(app.state.Validator, v)
+	app.State.Validator = append(app.State.Validator, v)
 }
 
 func (app *MyApp) RemoveFromStateValidator(addr string) {
-	newList := make([]types.ValidatorUpdate, 0, len(app.state.Validator))
-	for _, existing := range app.state.Validator {
+	newList := make([]types.ValidatorUpdate, 0, len(app.State.Validator))
+	for _, existing := range app.State.Validator {
 		pub, _ := cryptoenc.PubKeyFromTypeAndBytes(existing.PubKeyType, existing.PubKeyBytes)
 		if string(pub.Address()) != addr {
 			newList = append(newList, existing)
 		}
 	}
-	app.state.Validator = newList
+	app.State.Validator = newList
 }
 
 func (app *MyApp) SortStateValidatorByAddress() {
-	sort.Slice(app.state.Validator, func(i, j int) bool {
-		pub1, _ := cryptoenc.PubKeyFromTypeAndBytes(app.state.Validator[i].PubKeyType, app.state.Validator[i].PubKeyBytes)
-		pub2, _ := cryptoenc.PubKeyFromTypeAndBytes(app.state.Validator[j].PubKeyType, app.state.Validator[j].PubKeyBytes)
+	sort.Slice(app.State.Validator, func(i, j int) bool {
+		pub1, _ := cryptoenc.PubKeyFromTypeAndBytes(app.State.Validator[i].PubKeyType, app.State.Validator[i].PubKeyBytes)
+		pub2, _ := cryptoenc.PubKeyFromTypeAndBytes(app.State.Validator[j].PubKeyType, app.State.Validator[j].PubKeyBytes)
 
 		return string(pub1.Address()) < string(pub2.Address())
 	})
@@ -104,7 +104,7 @@ func (app *MyApp) CheckValidatorTX(reqtx string) (*types.CheckTxResponse, error)
 	}
 	if len(tx.Validator) == 0 {
 		logMsg := "ABCI CheckTx ERROR: Missing one or more required fields (type, Validator)."
-		app.logger.Error(logMsg)
+		app.Logger.Error(logMsg)
 		return &types.CheckTxResponse{Code: 4, Log: logMsg}, nil
 	}
 	for _, v := range tx.Validator {
@@ -113,30 +113,30 @@ func (app *MyApp) CheckValidatorTX(reqtx string) (*types.CheckTxResponse, error)
 		}
 	}
 
-	app.logger.Info(fmt.Sprintf("Validator Transaction OK."))
+	app.Logger.Info(fmt.Sprintf("Validator Transaction OK."))
 	return &types.CheckTxResponse{Code: CodeTypeOK, Log: "Validator Transaction Check passed."}, nil
 }
 
 func (app *MyApp) AppendValidatorUpdateOnce(addr string, vu types.ValidatorUpdate) {
-	if _, seen := app.updatedValidatorsThisBlock[addr]; seen {
-		app.logger.Info("Skipping duplicate validator update in same block", "addr", addr)
+	if _, seen := app.UpdatedValidatorsThisBlock[addr]; seen {
+		app.Logger.Info("Skipping duplicate validator update in same block", "addr", addr)
 		return
 	}
-	app.updatedValidatorsThisBlock[addr] = struct{}{}
-	app.valUpdates = append(app.valUpdates, vu)
+	app.UpdatedValidatorsThisBlock[addr] = struct{}{}
+	app.ValUpdates = append(app.ValUpdates, vu)
 }
 
 func (app *MyApp) punishValidators(req *types.FinalizeBlockRequest) {
-	app.valUpdates = make([]types.ValidatorUpdate, 0)
-	app.updatedValidatorsThisBlock = make(map[string]struct{})
+	app.ValUpdates = make([]types.ValidatorUpdate, 0)
+	app.UpdatedValidatorsThisBlock = make(map[string]struct{})
 
 	//Punish Validators committing equivocation
 	for _, ev := range req.Misbehavior {
 		if ev.Type == types.MISBEHAVIOR_TYPE_DUPLICATE_VOTE {
 			addr := string(ev.Validator.Address)
-			pubKey, ok := app.valAddrToPubKeyMap[addr]
+			pubKey, ok := app.ValAddrToPubKeyMap[addr]
 			if !ok {
-				app.logger.Error(fmt.Sprintf("Address %q should be punished but address not found", addr))
+				app.Logger.Error(fmt.Sprintf("Address %q should be punished but address not found", addr))
 				continue
 			}
 			power := ev.Validator.Power - 2
@@ -159,7 +159,7 @@ func (app *MyApp) punishValidators(req *types.FinalizeBlockRequest) {
 					PubKeyBytes: pubKey.Bytes(),
 				}, addr)
 			}
-			app.logger.Info("Decreased validator power by 2 because of the equivocation", "val", addr)
+			app.Logger.Info("Decreased validator power by 2 because of the equivocation", "val", addr)
 		}
 	}
 }

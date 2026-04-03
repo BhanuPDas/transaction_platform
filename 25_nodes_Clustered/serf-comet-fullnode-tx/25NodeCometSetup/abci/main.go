@@ -18,13 +18,13 @@ func main() {
 	logger.Info("--- Starting ABCI with Persistence enabled ---")
 	db, err := pebble.Open(STATE_DB_PATH, &pebble.Options{})
 	if err != nil {
-		logger.Error("failed to open state DB", "err", err)
+		logger.Error("failed to open State DB", "err", err)
 		return
 	}
 	defer func(db *pebble.DB) {
 		err := db.Close()
 		if err != nil {
-			logger.Error("failed to close state DB", "err", err)
+			logger.Error("failed to close State DB", "err", err)
 		}
 	}(db)
 

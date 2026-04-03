@@ -7,18 +7,34 @@ import (
 	"github.com/cometbft/cometbft/libs/log"
 )
 
-type TransferTransaction struct {
-	Type          string  `json:"type"`
-	Buyer         string  `json:"buyer"`
-	Seller        string  `json:"seller"`
-	Amount        int64   `json:"amount"`
-	Quantity      int64   `json:"quantity"`
+type SellerInfo struct {
+	Name    string             `json:"name"`
+	IP      string             `json:"ip"`
+	CPU     int64              `json:"cpu"`
+	RAM     float64            `json:"ram"`
+	Storage int64              `json:"storage"`
+	GPU     int64              `json:"gpu"`
+	Price   map[string]float64 `json:"price"`
+	Score   map[string]float64 `json:"score"`
+}
+type ResourceDemand struct {
+	DemandPerUnit int64   `json:"demand_per_unit"`
 	Score         float64 `json:"score"`
-	Price         float64 `json:"price"`
-	ResourceType  string  `json:"resource_type"`
-	TxStartTs     string  `json:"tx_start_ts"`
-	LeaseDuration int64   `json:"lease_duration"`
-	SellerEnergy  float64 `json:"seller_energy"`
+	Budget        float64 `json:"budget"`
+}
+type BuyerInfo struct {
+	Name      string                    `json:"name"`
+	IP        string                    `json:"ip"`
+	Resources map[string]ResourceDemand `json:"resource"`
+}
+type TransferTransaction struct {
+	Type          string     `json:"type"`
+	Buyer         BuyerInfo  `json:"buyer"`
+	Seller        SellerInfo `json:"seller"`
+	Amount        int64      `json:"amount"`
+	TxStartTs     string     `json:"tx_start_ts"`
+	LeaseDuration int64      `json:"lease_duration"`
+	SellerEnergy  float64    `json:"seller_energy"`
 }
 
 type Validators struct {
@@ -42,14 +58,14 @@ type State struct {
 
 type MyApp struct {
 	types.BaseApplication
-	state                      *State
+	State                      *State
 	RetainBlocks               int64
-	lastBlockHeight            int64
-	valUpdates                 []types.ValidatorUpdate
-	valAddrToPubKeyMap         map[string]crypto.PubKey
-	updatedValidatorsThisBlock map[string]struct{}
-	logger                     log.Logger
-	cls                        []string
+	LastBlockHeight            int64
+	ValUpdates                 []types.ValidatorUpdate
+	ValAddrToPubKeyMap         map[string]crypto.PubKey
+	UpdatedValidatorsThisBlock map[string]struct{}
+	Logger                     log.Logger
+	Cls                        []string
 }
 
 type TxDetails struct {
