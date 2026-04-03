@@ -11,4 +11,5 @@ const (
 	StatusCompleted         string = "Completed"
 	StatusFailed            string = "Failed"
 	StatusOnGoing           string = "OnGoing"
+	StatusExpired           string = "Expired"
 )

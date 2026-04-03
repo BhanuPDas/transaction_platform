@@ -103,6 +103,18 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 		app.SaveTx(txHash, txDetails, endTime)
 		return &types.ExecTxResult{Code: CodeTypeOK, Log: "Executed"}
 	}
+	if endTime.Before(req.Time.UTC()) {
+		txDetails := TxDetails{
+			Status:    StatusExpired,
+			TxHash:    txHash,
+			Tx:        tx,
+			TxEndUnix: endTime.Unix(),
+			TxEndTs:   (req.Time.UTC()).Format(time.RFC3339Nano),
+			Log:       "Invalid lease duration, transaction expired before it is processed",
+		}
+		app.SaveTx(txHash, txDetails, endTime)
+		return &types.ExecTxResult{Code: CodeTypeOK, Log: "Executed"}
+	}
 
 	fromBalance, fromExists := app.State.Ledger[tx.Buyer.Name]
 	_, toExists := app.State.Ledger[tx.Seller.Name]
