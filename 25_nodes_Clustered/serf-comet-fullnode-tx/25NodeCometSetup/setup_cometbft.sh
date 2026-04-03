@@ -39,7 +39,7 @@ setup_multinodes_cometbft() {
     goVersion=$(docker exec "$container" /usr/local/go/bin/go version)
     echo "$goVersion installation complete."
 
-    docker exec "$container" bash -c "cd /root && mkdir -p logs"
+    docker exec "$container" bash -c "cd /root && mkdir -p logs && mkdir -p cometclient"
     
     # Install CometBFT
     echo "Installing Cometbft..."
@@ -77,8 +77,9 @@ setup_multinodes_cometbft() {
     pVersion=$(docker exec "$container" python3 --version)
     echo "$pVersion installation complete."
     echo "Copying Serf Client and Cometbft client..."
-    docker cp "./cometclient/main.py" "$container":/root/ || { echo "Failed to copy main.py file to $container"; exit 1; }
-    docker cp "./cometclient/validator_tx.py" "$container":/root/ || { echo "Failed to copy main.py file to $container"; exit 1; }
+    docker cp "./cometclient/." "$container":/root/cometclient/ || { echo "Failed to copy main.py file to $container"; exit 1; }
+    #docker cp "./cometclient/main.py" "$container":/root/ || { echo "Failed to copy main.py file to $container"; exit 1; }
+    #docker cp "./cometclient/validator_tx.py" "$container":/root/ || { echo "Failed to copy validator.py file to $container"; exit 1; }
 
     echo "Cometbft setup in $container is complete."
     
