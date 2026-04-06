@@ -21,6 +21,7 @@ function statusClass(status) {
   if (s === 'completed') return 'completed';
   if (s === 'ongoing') return 'ongoing';
   if (s === 'failed') return 'failed';
+  if (s === 'expired') return 'expired';
   return 'default';
 }
 
@@ -66,8 +67,15 @@ export default function TransactionRecords({ buyerName, onBack }) {
 
         // Support both array and single-object responses
         const records = Array.isArray(decoded_json) ? decoded_json : [decoded_json];
-        // Newest first: sort by TxEndUnix descending (OnGoing = 0 → top)
-        records.sort((a, b) => (b.TxEndUnix || 0) - (a.TxEndUnix || 0));
+        // Ongoing (TxEndUnix=0) floats to top; rest sorted newest-first
+        records.sort((a, b) => {
+          const aOngoing = a.Status?.toLowerCase() === 'ongoing';
+          const bOngoing = b.Status?.toLowerCase() === 'ongoing';
+          if (aOngoing && !bOngoing) return -1;  // a comes first
+          if (!aOngoing && bOngoing) return 1;   // b comes first
+          // Both same status → sort by end time descending
+          return (b.TxEndUnix || 0) - (a.TxEndUnix || 0);
+        });
         setData(records);
         setCurrentPage(1); // reset to first page on fresh fetch
       } catch (err) {
@@ -114,141 +122,139 @@ export default function TransactionRecords({ buyerName, onBack }) {
           <p>No transaction records found for this node.</p>
         </div>
       ) : (() => {
-          const totalPages = Math.ceil(data.length / PAGE_SIZE);
-          const startIdx   = (currentPage - 1) * PAGE_SIZE;
-          const pageData   = data.slice(startIdx, startIdx + PAGE_SIZE);
+        const totalPages = Math.ceil(data.length / PAGE_SIZE);
+        const startIdx = (currentPage - 1) * PAGE_SIZE;
+        const pageData = data.slice(startIdx, startIdx + PAGE_SIZE);
 
-          return (
-            <>
-              <div className="tx-list">
-                {pageData.map((record, i) => {
-                  const tx = record.TxObj ?? record.Tx ?? {};
-                  const sc = statusClass(record.Status);
+        return (
+          <>
+            <div className="tx-list">
+              {pageData.map((record, i) => {
+                const tx = record.Tx ?? {};
+                const sc = statusClass(record.Status);
 
-                  return (
-                    <div className={`tx-card status-${sc}`} key={record.TxHash || i}>
+                return (
+                  <div className={`tx-card status-${sc}`} key={record.TxHash || i}>
 
-                      {/* ── Card header ── */}
-                      <div className="tx-card-header">
-                        <div className="tx-hash-group">
-                          <span className="tx-hash-label">Tx Hash</span>
-                          <span className="tx-hash-value">{record.TxHash || '—'}</span>
-                        </div>
-                        <StatusBadge status={record.Status} />
+                    {/* ── Card header ── */}
+                    <div className="tx-card-header">
+                      <div className="tx-hash-group">
+                        <span className="tx-hash-label">Tx ID</span>
+                        <span className="tx-hash-value">{record.TxHash || '—'}</span>
                       </div>
-
-                      {/* ── Detail grid ── */}
-                      <div className="tx-details-grid">
-
-                        {/* Parties */}
-                        <div className="tx-detail-item">
-                          <span className="tx-detail-label">Buyer</span>
-                          <span className="tx-detail-value highlight">{tx.buyer || '—'}</span>
-                        </div>
-                        <div className="tx-detail-item">
-                          <span className="tx-detail-label">Seller</span>
-                          <span className="tx-detail-value highlight">{tx.seller || '—'}</span>
-                        </div>
-
-                        {/* Resource */}
-                        <div className="tx-detail-item">
-                          <span className="tx-detail-label">Resource Type</span>
-                          <span className="tx-detail-value">{tx.resource_type || '—'}</span>
-                        </div>
-                        <div className="tx-detail-item">
-                          <span className="tx-detail-label">Quantity</span>
-                          <span className="tx-detail-value">{tx.quantity ?? '—'}</span>
-                        </div>
-
-                        {/* Financials */}
-                        <div className="tx-detail-item">
-                          <span className="tx-detail-label">Amount</span>
-                          <span className="tx-detail-value green">€{tx.amount ?? '—'}</span>
-                        </div>
-                        <div className="tx-detail-item">
-                          <span className="tx-detail-label">Price / Unit</span>
-                          <span className="tx-detail-value green">€{tx.price ?? '—'}</span>
-                        </div>
-
-                        {/* Score */}
-                        <div className="tx-detail-item">
-                          <span className="tx-detail-label">Score</span>
-                          <span className="tx-detail-value amber">{tx.score ?? '—'}</span>
-                        </div>
-
-                        {/* Tx Type */}
-                        <div className="tx-detail-item">
-                          <span className="tx-detail-label">Type</span>
-                          <span className="tx-detail-value">{tx.type || '—'}</span>
-                        </div>
-
-                        {/* Lease duration */}
-                        <div className="tx-detail-item">
-                          <span className="tx-detail-label">Lease Duration</span>
-                          <span className="tx-detail-value">{tx.lease_duration ? `${tx.lease_duration}s` : '—'}</span>
-                        </div>
-
-                        {/* Seller Energy */}
-                        <div className="tx-detail-item">
-                          <span className="tx-detail-label">Seller Energy</span>
-                          <span className="tx-detail-value">{tx.seller_energy ?? '—'}</span>
-                        </div>
-
-                        {/* Timestamps */}
-                        <div className="tx-detail-item">
-                          <span className="tx-detail-label">Tx Start</span>
-                          <span className="tx-detail-value">{formatTs(tx.tx_start_ts)}</span>
-                        </div>
-                        <div className="tx-detail-item">
-                          <span className="tx-detail-label">Tx End</span>
-                          <span className="tx-detail-value">{formatTs(record.TxEndTs)}</span>
-                        </div>
-
-                      </div>
-
-                      {/* ── Log ── */}
-                      {record.Log && (
-                        <div className="tx-log-row">
-                          📝 {record.Log}
-                        </div>
-                      )}
+                      <StatusBadge status={record.Status} />
                     </div>
-                  );
-                })}
-              </div>
 
-              {/* ── Pagination Controls ── */}
-              {totalPages > 1 && (
-                <div className="tx-pagination">
-                  <button
-                    id="tx-page-prev"
-                    className="tx-page-btn"
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(p => p - 1)}
-                  >
-                    ‹ Prev
-                  </button>
+                    {/* ── Detail grid ── */}
+                    <div className="tx-details-grid">
 
-                  <div className="tx-page-info">
-                    <span className="tx-page-current">{currentPage}</span>
-                    <span className="tx-page-sep">/</span>
-                    <span className="tx-page-total">{totalPages}</span>
-                    <span className="tx-page-records">({data.length} records)</span>
+                      {/* Buyer Information */}
+                      <div className="tx-detail-item" style={{ gridColumn: '1 / -1' }}>
+                        <span className="tx-detail-label">Buyer Information</span>
+                        <div className="tx-detail-value highlight">
+                          <pre className="json-pre">
+                            {tx.buyer ? JSON.stringify((({ resource, ...rest }) => rest)(tx.buyer), null, 2) : '—'}
+                          </pre>
+                        </div>
+                      </div>
+
+                      {/* Buyer's Demand */}
+                      <div className="tx-detail-item" style={{ gridColumn: '1 / -1' }}>
+                        <span className="tx-detail-label">Buyer's Demand</span>
+                        <div className="tx-detail-value">
+                          <pre className="json-pre">
+                            {tx.buyer?.resource ? JSON.stringify(tx.buyer.resource, null, 2) : '—'}
+                          </pre>
+                        </div>
+                      </div>
+
+                      {/* Seller Information */}
+                      <div className="tx-detail-item" style={{ gridColumn: '1 / -1' }}>
+                        <span className="tx-detail-label">Seller Information</span>
+                        <div className="tx-detail-value highlight">
+                          <pre className="json-pre">
+                            {tx.seller ? JSON.stringify(tx.seller, null, 2) : '—'}
+                          </pre>
+                        </div>
+                      </div>
+
+                      {/* Other tx properties (excluding type, buyer, seller) */}
+                      {Object.entries(tx).map(([k, v]) => {
+                        if (k === 'buyer' || k === 'seller' || k === 'type') return null;
+                        let displayValue = String(v);
+                        let cls = "tx-detail-value";
+                        if (k === 'amount' && v != null) { displayValue = `€${v}`; cls += " green"; }
+                        else if (k === 'lease_duration' && v != null) { displayValue = `${v}s`; }
+                        else if (k.endsWith('_ts') && v != null) { displayValue = formatTs(v); }
+                        else if (typeof v === 'object' && v !== null) { displayValue = JSON.stringify(v); }
+                        return (
+                          <div className="tx-detail-item" key={k}>
+                            <span className="tx-detail-label">{k.replace(/_/g, ' ')}</span>
+                            <span className={cls}>{displayValue}</span>
+                          </div>
+                        );
+                      })}
+
+                      {/* Other record fields */}
+                      {Object.entries(record).map(([k, v]) => {
+                        if (['Tx', 'Status', 'Log', 'TxHash', 'TxEndUnix', 'type'].includes(k)) return null;
+                        let displayValue = v;
+                        if (k.endsWith('Ts') && v != null) displayValue = formatTs(v);
+                        else if (typeof v === 'object' && v !== null) displayValue = JSON.stringify(v);
+                        else if (v != null) displayValue = String(v);
+                        return (
+                          <div className="tx-detail-item" key={k}>
+                            <span className="tx-detail-label">{k === 'TxEndTs' ? 'Tx End' : k.replace(/_/g, ' ')}</span>
+                            <span className="tx-detail-value">{displayValue || '—'}</span>
+                          </div>
+                        );
+                      })}
+
+                    </div>
+
+                    {/* ── Log ── */}
+                    {record.Log && (
+                      <div className="tx-log-row">
+                        📝 {record.Log}
+                      </div>
+                    )}
                   </div>
+                );
+              })}
+            </div>
 
-                  <button
-                    id="tx-page-next"
-                    className="tx-page-btn"
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage(p => p + 1)}
-                  >
-                    Next ›
-                  </button>
+            {/* ── Pagination Controls ── */}
+            {totalPages > 1 && (
+              <div className="tx-pagination">
+                <button
+                  id="tx-page-prev"
+                  className="tx-page-btn"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(p => p - 1)}
+                >
+                  ‹ Prev
+                </button>
+
+                <div className="tx-page-info">
+                  <span className="tx-page-current">{currentPage}</span>
+                  <span className="tx-page-sep">/</span>
+                  <span className="tx-page-total">{totalPages}</span>
+                  <span className="tx-page-records">({data.length} records)</span>
                 </div>
-              )}
-            </>
-          );
-        })()}
+
+                <button
+                  id="tx-page-next"
+                  className="tx-page-btn"
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(p => p + 1)}
+                >
+                  Next ›
+                </button>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* Back action */}
       <div className="tx-actions">
