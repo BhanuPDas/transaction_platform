@@ -3,6 +3,33 @@ import './TransactionRecords.css';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Renders an object's key-value pairs as labelled rows (no raw JSON). */
+function InfoFields({ data }) {
+  if (!data || typeof data !== 'object') return <span className="tx-detail-value">—</span>;
+  const entries = Object.entries(data).filter(([, v]) => v != null);
+  if (entries.length === 0) return <span className="tx-detail-value">—</span>;
+  return (
+    <div className="info-fields">
+      {entries.map(([k, v]) => {
+        let display;
+        if (typeof v === 'object') {
+          display = JSON.stringify(v);
+        } else if (typeof v === 'boolean') {
+          display = v ? 'Yes' : 'No';
+        } else {
+          display = String(v);
+        }
+        return (
+          <div className="info-field-row" key={k}>
+            <span className="info-field-key">{k.replace(/_/g, ' ')}</span>
+            <span className="info-field-val">{display}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function formatTs(ts) {
   if (!ts) return '—';
   try {
@@ -152,9 +179,9 @@ export default function TransactionRecords({ buyerName, onBack }) {
                       <div className="tx-detail-item" style={{ gridColumn: '1 / -1' }}>
                         <span className="tx-detail-label">Buyer Information</span>
                         <div className="tx-detail-value highlight">
-                          <pre className="json-pre">
-                            {tx.buyer ? JSON.stringify((({ resource, ...rest }) => rest)(tx.buyer), null, 2) : '—'}
-                          </pre>
+                          {tx.buyer
+                            ? (() => { const { resource, ...rest } = tx.buyer; return <InfoFields data={rest} />; })()
+                            : '—'}
                         </div>
                       </div>
 
@@ -162,9 +189,7 @@ export default function TransactionRecords({ buyerName, onBack }) {
                       <div className="tx-detail-item" style={{ gridColumn: '1 / -1' }}>
                         <span className="tx-detail-label">Buyer's Demand</span>
                         <div className="tx-detail-value">
-                          <pre className="json-pre">
-                            {tx.buyer?.resource ? JSON.stringify(tx.buyer.resource, null, 2) : '—'}
-                          </pre>
+                          <InfoFields data={tx.buyer?.resource} />
                         </div>
                       </div>
 
@@ -172,9 +197,7 @@ export default function TransactionRecords({ buyerName, onBack }) {
                       <div className="tx-detail-item" style={{ gridColumn: '1 / -1' }}>
                         <span className="tx-detail-label">Seller Information</span>
                         <div className="tx-detail-value highlight">
-                          <pre className="json-pre">
-                            {tx.seller ? JSON.stringify(tx.seller, null, 2) : '—'}
-                          </pre>
+                          <InfoFields data={tx.seller} />
                         </div>
                       </div>
 

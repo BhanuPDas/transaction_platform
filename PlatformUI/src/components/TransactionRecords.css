@@ -243,6 +243,42 @@
   word-break: break-word;
 }
 
+/* ─── InfoFields (parsed key-value display) ─── */
+.info-fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.3rem 1rem;
+  margin-top: 0.4rem;
+  padding: 0.75rem 1rem;
+  background: rgba(15, 23, 42, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.info-field-row {
+  display: contents;
+}
+
+.info-field-key {
+  font-size: 0.78rem;
+  color: #64748b;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: capitalize;
+  white-space: nowrap;
+  padding: 0.18rem 0;
+}
+
+.info-field-val {
+  font-size: 0.85rem;
+  color: #e2e8f0;
+  font-weight: 500;
+  word-break: break-word;
+  padding: 0.18rem 0;
+}
+
 /* Log row */
 .tx-log-row {
   margin-top: 0.9rem;
