@@ -97,10 +97,15 @@ def get_transaction():
         else:
             api_data = discovered.get("results")
             seller_rec = sellers_discovery.select_seller(resources, api_data)
-            amount = seller_rec.get("amount")
-            raw_seller = seller_rec.get("seller")
+            if not seller_rec:
+                logger.info("No suitable seller found, using empty seller")
+                seller_obj = empty_seller
+                amount = 0
+            else:
+                amount = seller_rec.get("amount")
+                raw_seller = seller_rec.get("seller")
+                seller_obj = sellers_discovery.create_seller(raw_seller)
             logger.info(f"Selected seller: {seller_rec}")
-            seller_obj = sellers_discovery.create_seller(raw_seller)
             logger.info(f"Received transaction request — BUYER: {buyer}, SELLER: {seller_obj['name'] or 'none'}")
             transactions.check_comet_status()
             logger.info("Preparing payload for transaction...")

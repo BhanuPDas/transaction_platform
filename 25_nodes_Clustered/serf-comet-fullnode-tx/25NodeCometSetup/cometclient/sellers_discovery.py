@@ -42,7 +42,7 @@ def find_sellers() -> dict:
 
 
 def select_seller(resources: dict, discovery_results: list) -> dict | None:
-    # Step 1: Get active resources only (demand > 0)
+    # Step 1: Active resources
     active = {
         k: v for k, v in resources.items()
         if v.get("demand_per_unit", 0) > 0
@@ -51,31 +51,39 @@ def select_seller(resources: dict, discovery_results: list) -> dict | None:
     if not active:
         logger.warning("No active resources in buyer request")
         return None
-
-    # Step 2: Pick the single resource with highest demand (tie = pick any)
+    if not discovery_results:
+        logger.warning("No sellers available after discovery")
+        return None
     primary_resource = max(active, key=lambda k: active[k]["demand_per_unit"])
     price_field = RESOURCE_MAP[primary_resource]["price"]
     logger.info(f"Primary resource: {primary_resource}, filtering sellers by: {price_field}")
+    valid_sellers = [
+        s for s in discovery_results
+        if s.get(price_field) is not None
+    ]
 
-    # Step 3: Pick seller with lowest price for that resource
-    selected = min(discovery_results, key=lambda s: s.get(price_field, float("inf")))
+    if not valid_sellers:
+        logger.warning(f"No sellers have valid price for {primary_resource}")
+        return None
+    selected = min(valid_sellers, key=lambda s: s[price_field])
 
-    # Step 4: Compute total amount across all active resources
-    # amount = ceil( sum(demand_per_unit * price_per_resource) ) for each active resource
+    # Step 4: calculate total amount
     amount = 0.0
     for resource_key, resource_val in active.items():
         demand = resource_val.get("demand_per_unit", 0)
         price_field_for_resource = RESOURCE_MAP[resource_key]["price"]
         price = selected.get(price_field_for_resource, 0.0)
-        amount += demand * price
-        logger.info(f"  {resource_key}: demand={demand} x price={price} = {demand * price}")
+
+        cost = demand * price
+        amount += cost
+
+        logger.info(f"{resource_key}: demand={demand} x price={price} = {cost}")
 
     amount = math.ceil(amount)
 
     logger.info(
-        f"Selected seller: {selected['name']} at {selected['ip']} | "
-        f"{RESOURCE_MAP[primary_resource]['price']}: {selected.get(RESOURCE_MAP[primary_resource]['price'])} | "
-        f"Total amount: {amount}"
+        f"Selected seller: {selected.get('name')} at {selected.get('ip')} | "
+        f"{price_field}: {selected.get(price_field)} | Total amount: {amount}"
     )
 
     return {
@@ -85,9 +93,12 @@ def select_seller(resources: dict, discovery_results: list) -> dict | None:
 
 
 def create_empty_sellers():
-    price, score = create_price_score(0.0, 0.0, 0.0, 0.0,
-                                      0.0, 0.0, 0.0, 0.0)
-    empty_seller = {
+    price, score = create_price_score(
+        0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0
+    )
+
+    return {
         "name": "",
         "ip": "",
         "cpu": 0,
@@ -97,15 +108,21 @@ def create_empty_sellers():
         "price": price,
         "score": score
     }
-    return empty_seller
 
 
 def create_seller(raw_seller):
-    price, score = create_price_score(raw_seller.get("price_per_cpu", 0.0), raw_seller.get("price_per_ram", 0.0),
-                                      raw_seller.get("price_per_storage", 0.0),raw_seller.get("price_per_gpu", 0.0),
-                                      raw_seller.get("score_per_cpu", 0.0), raw_seller.get("score_per_ram", 0.0),
-                                      raw_seller.get("score_per_storage", 0.0), raw_seller.get("score_per_gpu", 0.0))
-    seller_obj = {
+    price, score = create_price_score(
+        raw_seller.get("price_per_cpu", 0.0),
+        raw_seller.get("price_per_ram", 0.0),
+        raw_seller.get("price_per_storage", 0.0),
+        raw_seller.get("price_per_gpu", 0.0),
+        raw_seller.get("score_per_cpu", 0.0),
+        raw_seller.get("score_per_ram", 0.0),
+        raw_seller.get("score_per_storage", 0.0),
+        raw_seller.get("score_per_gpu", 0.0)
+    )
+
+    return {
         "name": raw_seller.get("name", ""),
         "ip": raw_seller.get("ip", ""),
         "cpu": raw_seller.get("cpu", 0),
@@ -115,21 +132,23 @@ def create_seller(raw_seller):
         "price": price,
         "score": score
     }
-    return seller_obj
 
 
 def create_price_score(price_per_cpu, price_per_ram, price_per_storage, price_per_gpu,
                        score_per_cpu, score_per_ram, score_per_storage, score_per_gpu):
+
     price = {
         "vcpu": price_per_cpu,
         "ram": price_per_ram,
         "storage": price_per_storage,
         "vgpu": price_per_gpu
     }
+
     score = {
         "vcpu": score_per_cpu,
         "ram": score_per_ram,
         "storage": score_per_storage,
         "vgpu": score_per_gpu
     }
+
     return price, score
