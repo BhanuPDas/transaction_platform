@@ -9,13 +9,6 @@ done
 reset_cometbft() {
   for i in "${!containers[@]}"; do
     container="${containers[$i]}"
-    ip_address=$(docker exec "$container" ip -4 addr show eth1 | grep -oP '(?<=inet\s)\d+\.\d+\.\d+\.\d+')
-    if [ -z "$ip_address" ]; then
-      echo "Failed to retrieve IP address for $container"
-      continue
-    fi
-    echo "IP address for $container (eth1): $ip_address"
-
     echo "=============================================="
     echo "Resetting ABCI + CometBFT on $container..."
     echo "=============================================="
@@ -59,8 +52,6 @@ reset_cometbft() {
     sleep 2
 
     echo "[6] Restarting CometBFT..."
-    nodeId=$(docker exec "$container" /root/go/bin/cometbft show-node-id)
-    docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"rpc_addr\":\"$nodeId@$ip_address:26656\"}}" http://127.0.0.1:5555/updatetags
     docker exec "$container" rm -f /root/.cometbft/config/genesis.json
     if (( i < 12 )); then
       docker cp "./cluster1Config/genesis.json" "$container":/root/.cometbft/config/
@@ -73,13 +64,13 @@ reset_cometbft() {
     echo "[7] Verifying logs..."
     docker exec "$container" tail -n 20 /root/logs/abci.log
     docker exec "$container" tail -n 20 /root/logs/cometbft.log
-#    tx_pid=$(docker exec "$container" pgrep -f "python3 tx_api.py")
-#    if [[ -n "$tx_pid" ]]; then
-#      docker exec "$container" kill -9 $tx_pid
-#      sleep 1
-#    else
-#      echo "Python Tx API not running"
-#    fi
+    tx_pid=$(docker exec "$container" pgrep -f "python3 tx_api.py")
+    if [[ -n "$tx_pid" ]]; then
+      docker exec "$container" kill -9 $tx_pid
+      sleep 1
+    else
+      echo "Python Tx API not running"
+    fi
     if (( i != 0 && i != 4 && i != 12 && i != 13 && i != 14 )); then
       docker exec -d "$container" bash -c "cd /root/cometclient && nohup python3 tx_api.py > /root/logs/tx_api.log 2>&1 &"
     fi
