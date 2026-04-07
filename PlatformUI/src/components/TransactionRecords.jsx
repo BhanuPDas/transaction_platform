@@ -3,22 +3,24 @@ import './TransactionRecords.css';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Renders an object's key-value pairs as labelled rows (no raw JSON). */
-function InfoFields({ data }) {
+/** Renders an object's key-value pairs as labelled rows (no raw JSON).
+ *  Nested objects are rendered as indented sub-sections. */
+function InfoFields({ data, depth = 0 }) {
   if (!data || typeof data !== 'object') return <span className="tx-detail-value">—</span>;
   const entries = Object.entries(data).filter(([, v]) => v != null);
   if (entries.length === 0) return <span className="tx-detail-value">—</span>;
   return (
-    <div className="info-fields">
+    <div className="info-fields" style={depth > 0 ? { paddingLeft: '12px', borderLeft: '2px solid rgba(255,255,255,0.1)', marginTop: '4px' } : {}}>
       {entries.map(([k, v]) => {
-        let display;
-        if (typeof v === 'object') {
-          display = JSON.stringify(v);
-        } else if (typeof v === 'boolean') {
-          display = v ? 'Yes' : 'No';
-        } else {
-          display = String(v);
+        if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+          return (
+            <div className="info-field-row info-field-group" key={k}>
+              <span className="info-field-key">{k.replace(/_/g, ' ')}</span>
+              <InfoFields data={v} depth={depth + 1} />
+            </div>
+          );
         }
+        const display = typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v);
         return (
           <div className="info-field-row" key={k}>
             <span className="info-field-key">{k.replace(/_/g, ' ')}</span>

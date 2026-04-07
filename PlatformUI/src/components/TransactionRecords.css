@@ -261,6 +261,23 @@
   display: contents;
 }
 
+/* Rows that contain a nested InfoFields sub-section must NOT use
+   display:contents — they need to span both grid columns and stack. */
+.info-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  grid-column: 1 / -1;
+}
+
+.info-field-group > .info-field-key {
+  font-size: 0.72rem;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+
 .info-field-key {
   font-size: 0.78rem;
   color: #64748b;
