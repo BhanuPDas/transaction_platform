@@ -1,3 +1,5 @@
+import time
+
 import requests
 import json
 from datetime import datetime, timezone
@@ -88,7 +90,12 @@ def get_transaction():
 
         #Buyers demand will be done by scripts
         #sellers_discovery.notify_buyer(ip=ip, resources=resources)
+        time.sleep(10)
+        starttimedb = time.time()
         discovered = sellers_discovery.find_sellers()
+        endtimedb = time.time()
+        dur = endtimedb - starttimedb
+        logger.info(f"Time taken by hilbert: {dur}")
         tx_start_ts = datetime.now(timezone.utc).isoformat()
         empty_seller = sellers_discovery.create_empty_sellers()
         if not discovered:
