@@ -86,7 +86,8 @@ def get_transaction():
             logger.info(f"No active resource demands in request: {data}")
             return jsonify({"error": "At least one resource must have demand_per_unit > 0"}), 400
 
-        sellers_discovery.notify_buyer(ip=ip, resources=resources)
+        #Buyers demand will be done by scripts
+        #sellers_discovery.notify_buyer(ip=ip, resources=resources)
         discovered = sellers_discovery.find_sellers()
         tx_start_ts = datetime.now(timezone.utc).isoformat()
         empty_seller = sellers_discovery.create_empty_sellers()
