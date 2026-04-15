@@ -89,13 +89,85 @@ def get_transaction():
             return jsonify({"error": "At least one resource must have demand_per_unit > 0"}), 400
 
         #Buyers demand will be done by scripts
-        #sellers_discovery.notify_buyer(ip=ip, resources=resources)
-        time.sleep(10)
+        sellers_discovery.notify_buyer(ip=ip, resources=resources)
         starttimedb = time.time()
         discovered = sellers_discovery.find_sellers()
         endtimedb = time.time()
         dur = endtimedb - starttimedb
         logger.info(f"Time taken by hilbert: {dur}")
+        tx_start_ts = datetime.now(timezone.utc).isoformat()
+        empty_seller = sellers_discovery.create_empty_sellers()
+        if not discovered:
+            logger.info("No sellers discovered, proceeding with empty seller")
+            seller_obj = empty_seller
+            amount = 0
+        else:
+            api_data = discovered.get("results")
+            seller_rec = sellers_discovery.select_seller(resources, api_data)
+            if not seller_rec:
+                logger.info("No suitable seller found, using empty seller")
+                seller_obj = empty_seller
+                amount = 0
+            else:
+                amount = seller_rec.get("amount")
+                raw_seller = seller_rec.get("seller")
+                seller_obj = sellers_discovery.create_seller(raw_seller)
+            logger.info(f"Selected seller: {seller_rec}")
+            logger.info(f"Received transaction request — BUYER: {buyer}, SELLER: {seller_obj['name'] or 'none'}")
+            transactions.check_comet_status()
+            logger.info("Preparing payload for transaction...")
+        buyer_obj = {
+            "name": buyer,
+            "ip": ip,
+            "resource": resources
+        }
+
+        tx_payload = transactions.create_tx_payload(buyer=buyer_obj,
+                                                    seller=seller_obj,
+                                                    amount=amount,
+                                                    tx_start_ts=tx_start_ts,
+                                                    lease_duration=lease_duration
+                                                    )
+
+        tx_hash = transactions.broadcast_transaction(tx_payload)
+        if tx_hash:
+            trigger_liqo.publish_redis(buyer_obj, seller_obj, amount, tx_start_ts, lease_duration)
+            return jsonify({"status": "success", "message": f"Resource Trade initiated: {tx_hash}"}), 200
+        else:
+            return jsonify({"status": "error", "message": "Error Occured in Transaction. Try Again"}), 400
+
+    except CometNotReadyError as e:
+        logger.error(str(e))
+    except Exception as exc:
+        logger.error(f"Unexpected error: {exc}")
+
+@app.route('/scr_initiate_tx', methods=['POST'])
+def get_transaction_scr():
+    try:
+        data = request.get_json(silent=True)
+        logger.info(f"Received request: {data}")
+        if not data or not data.get("Demand_output"):
+            logger.info("Empty or malformed JSON received")
+            return jsonify({"error": "Invalid request received"}), 400
+        demand_output = data.get("Demand_output")
+        ip = demand_output.get("ip")
+        lease_duration = demand_output.get("lease_duration")
+        resources = demand_output.get("resources")
+
+        if not ip or not lease_duration or not resources:
+            logger.info(f"Missing required fields in request: {data}")
+            return jsonify({"error": "Invalid request received"}), 400
+
+        # Optional: validate that at least one resource has non-zero demand
+        active_resources = {
+            k: v for k, v in resources.items()
+            if v.get("demand_per_unit", 0) > 0
+        }
+        if not active_resources:
+            logger.info(f"No active resource demands in request: {data}")
+            return jsonify({"error": "At least one resource must have demand_per_unit > 0"}), 400
+
+        discovered = data.get("Hilbert_output", {})
         tx_start_ts = datetime.now(timezone.utc).isoformat()
         empty_seller = sellers_discovery.create_empty_sellers()
         if not discovered:
