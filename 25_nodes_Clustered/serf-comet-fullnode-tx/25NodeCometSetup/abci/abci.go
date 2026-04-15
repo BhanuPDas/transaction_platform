@@ -46,12 +46,12 @@ func (app *MyApp) InitChain(_ context.Context, req *types.InitChainRequest) (*ty
 		if len(app.Cls) > 0 && app.Cls[0] == "clusterA" {
 			for i := 1; i <= 12; i++ {
 				key := fmt.Sprintf("serf%d", i)
-				app.State.Ledger[key] = 1000000
+				app.State.Ledger[key] = 100000
 			}
 		} else if len(app.Cls) > 0 && app.Cls[0] == "clusterB" {
 			for i := 13; i <= 25; i++ {
 				key := fmt.Sprintf("serf%d", i)
-				app.State.Ledger[key] = 1000000
+				app.State.Ledger[key] = 100000
 			}
 		}
 	} else {
