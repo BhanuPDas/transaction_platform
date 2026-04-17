@@ -9,6 +9,12 @@ done
 reset_cometbft() {
   for i in "${!containers[@]}"; do
     container="${containers[$i]}"
+    ip_address=$(docker exec "$container" ip -4 addr show eth1 | grep -oP '(?<=inet\s)\d+\.\d+\.\d+\.\d+')
+    if [ -z "$ip_address" ]; then
+      echo "Failed to retrieve IP address for $container"
+      continue
+    fi
+    echo "IP address for $container (eth1): $ip_address"
     echo "=============================================="
     echo "Resetting ABCI + CometBFT on $container..."
     echo "=============================================="
@@ -66,6 +72,8 @@ reset_cometbft() {
     else
       docker cp "./cluster2Config/genesis.json" "$container":/root/.cometbft/config/
     fi
+    nodeId=$(docker exec "$container" /root/go/bin/cometbft show-node-id)
+    docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"rpc_addr\":\"$nodeId@$ip_address:26656\"}}" http://127.0.0.1:5555/updatetags
     docker exec -d "$container" bash -c "nohup /root/go/bin/cometbft node > /root/logs/cometbft.log 2>&1"
     sleep 3
 
