@@ -60,12 +60,12 @@ reset_cometbft() {
     sleep 2
 
     echo "[7] Restarting CometBFT..."
-#    docker exec "$container" rm -f /root/.cometbft/config/genesis.json
-#    if (( i < 12 )); then
-#      docker cp "./cluster1Config/genesis.json" "$container":/root/.cometbft/config/
-#    else
-#      docker cp "./cluster2Config/genesis.json" "$container":/root/.cometbft/config/
-#    fi
+    docker exec "$container" rm -f /root/.cometbft/config/genesis.json
+    if (( i < 12 )); then
+      docker cp "./cluster1Config/genesis.json" "$container":/root/.cometbft/config/
+    else
+      docker cp "./cluster2Config/genesis.json" "$container":/root/.cometbft/config/
+    fi
     docker exec -d "$container" bash -c "nohup /root/go/bin/cometbft node > /root/logs/cometbft.log 2>&1"
     sleep 3
 

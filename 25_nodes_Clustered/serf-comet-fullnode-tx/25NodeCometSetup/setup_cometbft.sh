@@ -65,11 +65,11 @@ setup_multinodes_cometbft() {
     docker exec "$container" mv /root/.cometbft/config/genesis.json /root/.cometbft/config/genesis_prsv.json
     docker cp "./genesis.json" "$container":/root/.cometbft/config/
     echo "Starting Cometbft..."
-    docker exec -d "$container" bash -c "nohup /root/go/bin/cometbft node > /root/logs/cometbft.log 2>&1"
+    #docker exec -d "$container" bash -c "nohup /root/go/bin/cometbft node > /root/logs/cometbft.log 2>&1"
 
     # Add tags to Serf
     echo "Setting Serf Tags for $container..."
-    #docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"rpc_addr\":\"$nodeId@$ip_address:26656\"}}" http://127.0.0.1:5555/updatetags
+    docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"rpc_addr\":\"$nodeId@$ip_address:26656\"}}" http://127.0.0.1:5555/updatetags
     
     # Install Python
     echo "Installing Python..."
@@ -78,8 +78,6 @@ setup_multinodes_cometbft() {
     echo "$pVersion installation complete."
     echo "Copying Serf Client and Cometbft client..."
     docker cp "./cometclient/." "$container":/root/cometclient/ || { echo "Failed to copy main.py file to $container"; exit 1; }
-    #docker cp "./cometclient/main.py" "$container":/root/ || { echo "Failed to copy main.py file to $container"; exit 1; }
-    #docker cp "./cometclient/validator_tx.py" "$container":/root/ || { echo "Failed to copy validator.py file to $container"; exit 1; }
 
     echo "Cometbft setup in $container is complete."
     
