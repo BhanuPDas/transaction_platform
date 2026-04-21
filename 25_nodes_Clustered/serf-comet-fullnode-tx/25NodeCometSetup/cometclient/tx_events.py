@@ -28,4 +28,8 @@ async def subscribe():
             response = await websocket.recv()
             data = json.loads(response)
             logger.info("Received event:\n", json.dumps(data, indent=2))
-            
+            if data:
+                result = data.get("result", {})
+                if result or result.get("data") or result.get("data").get("value") or result.get("data").get(
+                    "value").get("TxResult"):
+                    logger.info(f"TxResult: {result}")
