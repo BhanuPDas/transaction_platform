@@ -29,6 +29,18 @@ def notify_buyer(ip: str, resources: dict) -> dict:
     response.raise_for_status()
     return response.json()
 
+def notify_fail_tx_buyer(tx: dict):
+    url = f"{BUYER_URL}/fail_tx"
+    payload = {
+        "tx": tx
+    }
+    response = requests.post(url, json=payload, timeout=10)
+    response.raise_for_status()
+    if response.status_code == 204:
+        logger.info("Tx details sent successfully")
+    else:
+        logger.error(f"Tx details couldn't be sent due to status code: {response.status_code}")
+
 
 def find_sellers() -> dict:
     try:
