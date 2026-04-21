@@ -98,6 +98,7 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 			{
 				Type: "failedTx",
 				Attributes: []types.EventAttribute{
+					{Key: "status", Value: txDetails.Status, Index: true},
 					{Key: "tx", Value: string(txStr), Index: true},
 				},
 			},
@@ -123,6 +124,7 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 			{
 				Type: "failedTx",
 				Attributes: []types.EventAttribute{
+					{Key: "status", Value: txDetails.Status, Index: true},
 					{Key: "tx", Value: string(txStr), Index: true},
 				},
 			},
