@@ -69,10 +69,10 @@ type MyApp struct {
 }
 
 type TxDetails struct {
-	Status    string
-	TxHash    string
-	TxEndUnix int64
-	TxEndTs   string
-	Tx        TransferTransaction
-	Log       string
+	Status    string              `json:"status"`
+	TxHash    string              `json:"tx_hash"`
+	TxEndUnix int64               `json:"tx_end_unix"`
+	TxEndTs   string              `json:"tx_end_ts"`
+	Tx        TransferTransaction `json:"tx"`
+	Log       string              `json:"log"`
 }

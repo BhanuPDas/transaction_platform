@@ -5,9 +5,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/cometbft/cometbft/abci/types"
 	"strconv"
 	"time"
+
+	"github.com/cometbft/cometbft/abci/types"
 )
 
 func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockRequest) (*types.FinalizeBlockResponse, error) {
@@ -60,6 +61,7 @@ func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockReque
 
 func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest) *types.ExecTxResult {
 	var tx TransferTransaction
+	var events []types.Event
 	if err := json.Unmarshal(decodedStrTx, &tx); err != nil {
 		return &types.ExecTxResult{Code: 2, Log: "Bad JSON"}
 	}
@@ -88,7 +90,19 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 			Log:       "No Seller Found For The Buyer Demand",
 		}
 		app.SaveTx(txHash, txDetails, endTime)
-		return &types.ExecTxResult{Code: CodeTypeOK, Log: "Executed"}
+		txStr, err := json.Marshal(txDetails)
+		if err != nil {
+			app.Logger.Error(fmt.Sprintf("ABCI ERROR: Failed to marshal tx details for the event: %v", err))
+		}
+		events = []types.Event{
+			{
+				Type: "failedTx",
+				Attributes: []types.EventAttribute{
+					{Key: "tx", Value: string(txStr), Index: true},
+				},
+			},
+		}
+		return &types.ExecTxResult{Code: CodeTypeOK, Log: "Executed", Events: events}
 	}
 	hasBudget, _ := HasHighBudget(tx.Buyer, tx.Seller)
 	if !hasBudget {
@@ -101,7 +115,19 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 			Log:       "Buyer Has Very Low Budget For The Resources",
 		}
 		app.SaveTx(txHash, txDetails, endTime)
-		return &types.ExecTxResult{Code: CodeTypeOK, Log: "Executed"}
+		txStr, err := json.Marshal(txDetails)
+		if err != nil {
+			app.Logger.Error(fmt.Sprintf("ABCI ERROR: Failed to marshal tx details for the event: %v", err))
+		}
+		events = []types.Event{
+			{
+				Type: "failedTx",
+				Attributes: []types.EventAttribute{
+					{Key: "tx", Value: string(txStr), Index: true},
+				},
+			},
+		}
+		return &types.ExecTxResult{Code: CodeTypeOK, Log: "Executed", Events: events}
 	}
 	if endTime.Before(req.Time.UTC()) {
 		txDetails := TxDetails{
@@ -118,7 +144,6 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 
 	fromBalance, fromExists := app.State.Ledger[tx.Buyer.Name]
 	_, toExists := app.State.Ledger[tx.Seller.Name]
-	var events []types.Event
 	if fromExists && toExists {
 		if fromBalance < tx.Amount {
 			return &types.ExecTxResult{Code: 5, Log: "Insufficient funds"}
