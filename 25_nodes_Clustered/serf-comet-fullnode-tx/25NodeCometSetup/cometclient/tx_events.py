@@ -6,11 +6,6 @@ import websockets
 import sellers_discovery
 
 COMETBFT_WS_URL = "ws://localhost:26657/websocket"
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
 logger = logging.getLogger(__name__)
 
 
