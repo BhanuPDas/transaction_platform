@@ -29,7 +29,7 @@ async def subscribe():
                     response = await websocket.recv()
                     data = json.loads(response)
 
-                    logger.debug("Raw event:\n%s", json.dumps(data, indent=2))
+                    logger.info("Raw event:\n%s", json.dumps(data, indent=2))
 
                     result = data.get("result")
                     if not result:
@@ -59,8 +59,8 @@ async def subscribe():
 
                         for attr in event.get("attributes", []):
                             try:
-                                key = base64.b64decode(attr["key"]).decode()
-                                val = base64.b64decode(attr["value"]).decode()
+                                key = base64.b64decode(attr["key"]).decode('utf-8')
+                                val = base64.b64decode(attr["value"]).decode('utf-8')
                                 decoded_attrs[key] = val
                             except Exception as e:
                                 logger.warning(f"Failed to decode attribute: {e}")
