@@ -1,6 +1,5 @@
 import asyncio
 import json
-import base64
 import logging
 import websockets
 import sellers_discovery
@@ -59,8 +58,8 @@ async def subscribe():
 
                         for attr in event.get("attributes", []):
                             try:
-                                key = base64.b64decode(attr["key"]).decode('utf-8')
-                                val = base64.b64decode(attr["value"]).decode('utf-8')
+                                key = attr["key"]
+                                val = attr["value"]
                                 decoded_attrs[key] = val
                             except Exception as e:
                                 logger.warning(f"Failed to decode attribute: {e}")

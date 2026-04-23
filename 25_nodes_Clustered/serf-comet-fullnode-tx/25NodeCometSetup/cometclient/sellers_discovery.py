@@ -4,11 +4,6 @@ import math
 
 BUYER_URL = "http://localhost:8090"
 HILBERT_URL = "http://localhost:4041/hilbert-output"
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
 logger = logging.getLogger(__name__)
 
 RESOURCE_MAP = {
@@ -20,14 +15,17 @@ RESOURCE_MAP = {
 
 
 def notify_buyer(ip: str, resources: dict) -> dict:
-    url = f"{BUYER_URL}/buyer"
-    payload = {
-        "ip": ip,
-        "resources": resources
-    }
-    response = requests.post(url, json=payload, timeout=10)
-    response.raise_for_status()
-    return response.json()
+    try:
+        url = f"{BUYER_URL}/buyer"
+        payload = {
+            "ip": ip,
+            "resources": resources
+        }
+        response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except Exception as exc:
+        logger.error(f"Unexpected error: {exc}")
 
 def notify_fail_tx_buyer(tx: dict):
     try:
