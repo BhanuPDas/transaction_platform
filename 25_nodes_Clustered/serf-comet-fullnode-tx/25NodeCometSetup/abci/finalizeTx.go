@@ -141,7 +141,7 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 			Log:       "Invalid lease duration, transaction expired before it is processed",
 		}
 		app.SaveTx(txHash, txDetails, endTime)
-		return &types.ExecTxResult{Code: CodeTypeOK, Log: "Executed"}
+		return &types.ExecTxResult{Code: CodeTypeOK, Log: "Executed", Events: events}
 	}
 
 	fromBalance, fromExists := app.State.Ledger[tx.Buyer.Name]
