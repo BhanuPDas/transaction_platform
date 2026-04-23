@@ -3,6 +3,7 @@ import json
 import base64
 import logging
 import websockets
+import sellers_discovery
 
 COMETBFT_WS_URL = "ws://localhost:26657/websocket"
 
@@ -87,6 +88,8 @@ async def subscribe():
 
                         logger.info("🚨 Failed Tx Detected:")
                         logger.info(json.dumps(tx_details, indent=2))
+                        logger.info("Sending the failed tx to buyer.")
+                        sellers_discovery.notify_fail_tx_buyer(tx_details)
 
         except Exception as e:
             logger.error(f"WebSocket error: {e}. Reconnecting in 2s...")
