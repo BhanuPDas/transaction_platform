@@ -73,7 +73,7 @@ setup_multinodes_cometbft() {
     
     # Install Python
     echo "Installing Python..."
-    docker exec "$container" bash -c "DEBIAN_FRONTEND=noninteractive apt update && apt upgrade -y && apt install -y python3 python3-pip && pip3 install --no-cache-dir flask requests redis"
+    docker exec "$container" bash -c "DEBIAN_FRONTEND=noninteractive apt update && apt upgrade -y && apt install -y python3 python3-pip && pip3 install --no-cache-dir flask requests redis websockets"
     pVersion=$(docker exec "$container" python3 --version)
     echo "$pVersion installation complete."
     echo "Copying Serf Client and Cometbft client..."

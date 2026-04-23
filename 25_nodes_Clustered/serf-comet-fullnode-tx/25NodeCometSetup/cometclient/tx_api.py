@@ -9,6 +9,7 @@ import trigger_liqo
 from flask import Flask, request, jsonify
 import sellers_discovery
 import tx_events
+import threading
 
 # --- Configuration ---
 SERF_URL = "http://127.0.0.1:5555"
@@ -27,6 +28,8 @@ logger = logging.getLogger(__name__)
 class CometNotReadyError(Exception):
     pass
 
+def start_ws():
+    asyncio.run(tx_events.subscribe())
 
 def get_node_name(json_path):
     try:
@@ -222,7 +225,8 @@ if __name__ == "__main__":
         bft_addr, bip = get_nodeip_and_bftaddr(buyer)
         buyer_ip = bip
         transactions.dial_peers(peers=bft_addr, persistent=True)
-        asyncio.run(tx_events.subscribe())
+        ws_thread = threading.Thread(target=start_ws, daemon=True)
+        ws_thread.start()
         app.run(debug=True, host='0.0.0.0', port=5665)
     except Exception as ex:
         logger.error(f"Unexpected error: {ex}")
