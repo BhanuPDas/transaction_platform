@@ -17,7 +17,7 @@ async def subscribe():
                     "method": "subscribe",
                     "id": "1",
                     "params": {
-                        "query": "tm.event='Tx'"
+                        "query": "tm.event='Tx' AND failedTx.status='Failed'"
                     }
                 }
 
