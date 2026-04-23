@@ -82,7 +82,7 @@ reset_cometbft() {
     docker exec "$container" tail -n 20 /root/logs/cometbft.log
 #    if (( i != 0 && i != 4 && i != 12 && i != 13 && i != 14 )); then
     if (( i != 0 && i != 1 && i != 2)); then
-      docker exec "$container" bash -c "pip3 install --no-cache-dir websockets"
+#      docker exec "$container" bash -c "pip3 install --no-cache-dir websockets"
       docker exec -d "$container" bash -c "cd /root/cometclient && nohup python3 tx_api.py > /root/logs/tx_api.log 2>&1 &"
     fi
     echo "✔ Done with $container"
