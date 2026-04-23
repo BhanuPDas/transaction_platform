@@ -17,7 +17,7 @@ async def subscribe():
                     "method": "subscribe",
                     "id": "1",
                     "params": {
-                        "query": "tm.event='Tx' AND failedTx.status EXISTS"
+                        "query": "tm.event='Tx'"
                     }
                 }
 
@@ -66,7 +66,7 @@ async def subscribe():
                                 continue
 
                         status = decoded_attrs.get("status")
-                        if status != "FAILED":
+                        if status != "Failed":
                             continue
 
                         tx_json = decoded_attrs.get("tx")
