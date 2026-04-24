@@ -30,9 +30,7 @@ async def subscribe():
                 while True:
                     response = await websocket.recv()
                     data = json.loads(response)
-
-                    logger.info("Raw event:\n%s", json.dumps(data, indent=2))
-
+                    #logger.info("Raw event:\n%s", json.dumps(data, indent=2))
                     result = data.get("result")
                     if not result:
                         continue
@@ -65,7 +63,7 @@ async def subscribe():
                                 val = attr["value"]
                                 decoded_attrs[key] = val
                             except Exception as e:
-                                logger.warning(f"Failed to decode attribute: {e}")
+                                logger.error(f"Failed to decode attribute: {e}")
                                 continue
 
                         status = decoded_attrs.get("status")
