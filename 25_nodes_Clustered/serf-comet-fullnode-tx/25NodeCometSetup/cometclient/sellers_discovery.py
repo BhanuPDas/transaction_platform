@@ -35,7 +35,7 @@ def notify_fail_tx_buyer(tx: dict):
         }
         response = requests.post(url, json=payload, timeout=10)
         response.raise_for_status()
-        if response.status_code == 204:
+        if response.status_code in (200, 204):
             logger.info("Tx details sent successfully")
         else:
             logger.error(f"Tx details couldn't be sent due to status code: {response.status_code}")
