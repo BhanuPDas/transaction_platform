@@ -98,12 +98,12 @@ export default function TransactionRecords({ buyerName, onBack }) {
         const records = Array.isArray(decoded_json) ? decoded_json : [decoded_json];
         // Ongoing (TxEndUnix=0) floats to top; rest sorted newest-first
         records.sort((a, b) => {
-          const aOngoing = a.Status?.toLowerCase() === 'ongoing';
-          const bOngoing = b.Status?.toLowerCase() === 'ongoing';
+          const aOngoing = a.status?.toLowerCase() === 'ongoing';
+          const bOngoing = b.status?.toLowerCase() === 'ongoing';
           if (aOngoing && !bOngoing) return -1;  // a comes first
           if (!aOngoing && bOngoing) return 1;   // b comes first
           // Both same status → sort by end time descending
-          return (b.TxEndUnix || 0) - (a.TxEndUnix || 0);
+          return (b.tx_end_unix || 0) - (a.tx_end_unix || 0);
         });
         setData(records);
         setCurrentPage(1); // reset to first page on fresh fetch
@@ -159,19 +159,19 @@ export default function TransactionRecords({ buyerName, onBack }) {
           <>
             <div className="tx-list">
               {pageData.map((record, i) => {
-                const tx = record.Tx ?? {};
-                const sc = statusClass(record.Status);
+                const tx = record.tx ?? {};
+                const sc = statusClass(record.status);
 
                 return (
-                  <div className={`tx-card status-${sc}`} key={record.TxHash || i}>
+                  <div className={`tx-card status-${sc}`} key={record.tx_hash || i}>
 
                     {/* ── Card header ── */}
                     <div className="tx-card-header">
                       <div className="tx-hash-group">
                         <span className="tx-hash-label">Tx ID</span>
-                        <span className="tx-hash-value">{record.TxHash || '—'}</span>
+                        <span className="tx-hash-value">{record.tx_hash || '—'}</span>
                       </div>
-                      <StatusBadge status={record.Status} />
+                      <StatusBadge status={record.status} />
                     </div>
 
                     {/* ── Detail grid ── */}
@@ -210,7 +210,7 @@ export default function TransactionRecords({ buyerName, onBack }) {
                         let cls = "tx-detail-value";
                         if (k === 'amount' && v != null) { displayValue = `€${v}`; cls += " green"; }
                         else if (k === 'lease_duration' && v != null) { displayValue = `${v}s`; }
-                        else if (k.endsWith('_ts') && v != null) { displayValue = formatTs(v); }
+                        else if (k === 'tx_start_ts' && v != null) { displayValue = formatTs(v); }
                         else if (typeof v === 'object' && v !== null) { displayValue = JSON.stringify(v); }
                         return (
                           <div className="tx-detail-item" key={k}>
@@ -222,14 +222,14 @@ export default function TransactionRecords({ buyerName, onBack }) {
 
                       {/* Other record fields */}
                       {Object.entries(record).map(([k, v]) => {
-                        if (['Tx', 'Status', 'Log', 'TxHash', 'TxEndUnix', 'type'].includes(k)) return null;
+                        if (['tx', 'status', 'log', 'tx_hash', 'tx_end_unix', 'type'].includes(k)) return null;
                         let displayValue = v;
-                        if (k.endsWith('Ts') && v != null) displayValue = formatTs(v);
+                        if (k === 'tx_end_ts' && v != null) displayValue = formatTs(v);
                         else if (typeof v === 'object' && v !== null) displayValue = JSON.stringify(v);
                         else if (v != null) displayValue = String(v);
                         return (
                           <div className="tx-detail-item" key={k}>
-                            <span className="tx-detail-label">{k === 'TxEndTs' ? 'Tx End' : k.replace(/_/g, ' ')}</span>
+                            <span className="tx-detail-label">{k === 'tx_end_ts' ? 'Tx End' : k.replace(/_/g, ' ')}</span>
                             <span className="tx-detail-value">{displayValue || '—'}</span>
                           </div>
                         );
@@ -238,9 +238,9 @@ export default function TransactionRecords({ buyerName, onBack }) {
                     </div>
 
                     {/* ── Log ── */}
-                    {record.Log && (
+                    {record.log && (
                       <div className="tx-log-row">
-                        📝 {record.Log}
+                        📝 {record.log}
                       </div>
                     )}
                   </div>
