@@ -227,6 +227,6 @@ if __name__ == "__main__":
         transactions.dial_peers(peers=bft_addr, persistent=True)
         ws_thread = threading.Thread(target=start_ws, daemon=True)
         ws_thread.start()
-        app.run(debug=True, host='0.0.0.0', port=5665)
+        app.run(debug=False, use_reloader=False, host='0.0.0.0', port=5665)
     except Exception as ex:
         logger.error(f"Unexpected error: {ex}")
