@@ -4,11 +4,14 @@ import logging
 import websockets
 import sellers_discovery
 
+MAX_SEEN = 10_000
+
 COMETBFT_WS_URL = "ws://localhost:26657/websocket"
 logger = logging.getLogger(__name__)
 
 
 async def subscribe():
+    seen_tx_hashes = set()
     while True:
         try:
             async with websockets.connect(COMETBFT_WS_URL) as websocket:
@@ -76,6 +79,14 @@ async def subscribe():
 
                         try:
                             tx_details = json.loads(tx_json)
+                            tx_hash = tx_details.get("tx_hash")
+                            if tx_hash:
+                                if tx_hash in seen_tx_hashes:
+                                    logger.info(f"Duplicate event ignored: {tx_hash}")
+                                    continue
+                                seen_tx_hashes.add(tx_hash)
+                                if len(seen_tx_hashes) > MAX_SEEN:
+                                    seen_tx_hashes.clear()
                         except Exception as e:
                             logger.error(f"Failed to parse tx JSON: {e}")
                             continue
