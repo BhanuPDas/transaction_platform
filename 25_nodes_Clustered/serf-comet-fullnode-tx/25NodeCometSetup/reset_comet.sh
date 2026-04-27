@@ -2,19 +2,19 @@
 
 # List of containers
 containers=()
-for i in {13..25}; do
+for i in {1..25}; do
   containers+=(clab-century-serf$i)
 done
 
 reset_cometbft() {
   for i in "${!containers[@]}"; do
     container="${containers[$i]}"
-#    ip_address=$(docker exec "$container" ip -4 addr show eth1 | grep -oP '(?<=inet\s)\d+\.\d+\.\d+\.\d+')
-#    if [ -z "$ip_address" ]; then
-#      echo "Failed to retrieve IP address for $container"
-#      continue
-#    fi
-#    echo "IP address for $container (eth1): $ip_address"
+    ip_address=$(docker exec "$container" ip -4 addr show eth1 | grep -oP '(?<=inet\s)\d+\.\d+\.\d+\.\d+')
+    if [ -z "$ip_address" ]; then
+      echo "Failed to retrieve IP address for $container"
+      continue
+    fi
+    echo "IP address for $container (eth1): $ip_address"
     echo "=============================================="
     echo "Resetting ABCI + CometBFT on $container..."
     echo "=============================================="
@@ -58,31 +58,29 @@ reset_cometbft() {
     docker cp "./abci/." "$container":/root/abci/ || { echo "Failed to copy abci files to $container"; exit 1; }
     docker cp "./cometclient/." "$container":/root/cometclient/ || { echo "Failed to copy main.py file to $container"; exit 1; }
     docker exec "$container" bash -c "cd /root/abci && /usr/local/go/bin/go clean -modcache && /usr/local/go/bin/go mod tidy && /usr/local/go/bin/go build -o /root/abci-app *.go"
-#    if (( i < 12 )); then
-#     docker exec -d "$container" bash -c "cd /root/abci/clusterAConfig && nohup /root/abci-app > /root/logs/abci.log 2>&1"
-#    else
+    if (( i < 12 )); then
+     docker exec -d "$container" bash -c "cd /root/abci/clusterAConfig && nohup /root/abci-app > /root/logs/abci.log 2>&1"
+    else
       docker exec -d "$container" bash -c "cd /root/abci/clusterBConfig && nohup /root/abci-app > /root/logs/abci.log 2>&1"
-#    fi
+    fi
     sleep 2
 
     echo "[7] Restarting CometBFT..."
-#    docker exec "$container" rm -f /root/.cometbft/config/genesis.json
-#    if (( i < 12 )); then
-#      docker cp "./cluster1Config/genesis.json" "$container":/root/.cometbft/config/
-#    else
-#      docker cp "./cluster2Config/genesis.json" "$container":/root/.cometbft/config/
-#    fi
-#    nodeId=$(docker exec "$container" /root/go/bin/cometbft show-node-id)
-#    docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"rpc_addr\":\"$nodeId@$ip_address:26656\"}}" http://127.0.0.1:5555/updatetags
+    docker exec "$container" rm -f /root/.cometbft/config/genesis.json
+    if (( i < 12 )); then
+      docker cp "./cluster1Config/genesis.json" "$container":/root/.cometbft/config/
+    else
+      docker cp "./cluster2Config/genesis.json" "$container":/root/.cometbft/config/
+    fi
+    nodeId=$(docker exec "$container" /root/go/bin/cometbft show-node-id)
+    docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"rpc_addr\":\"$nodeId@$ip_address:26656\"}}" http://127.0.0.1:5555/updatetags
     docker exec -d "$container" bash -c "nohup /root/go/bin/cometbft node > /root/logs/cometbft.log 2>&1"
     sleep 3
 
     echo "[8] Verifying logs..."
     docker exec "$container" tail -n 20 /root/logs/abci.log
     docker exec "$container" tail -n 20 /root/logs/cometbft.log
-#    if (( i != 0 && i != 4 && i != 12 && i != 13 && i != 14 )); then
-    if (( i != 0 && i != 1 && i != 2)); then
-#      docker exec "$container" bash -c "pip3 install --no-cache-dir websockets"
+    if (( i != 0 && i != 4 && i != 12 && i != 13 && i != 14 )); then
       docker exec -d "$container" bash -c "cd /root/cometclient && nohup python3 tx_api.py > /root/logs/tx_api.log 2>&1 &"
     fi
     echo "✔ Done with $container"
