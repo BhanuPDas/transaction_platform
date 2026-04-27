@@ -4,7 +4,7 @@ import logging
 import websockets
 import sellers_discovery
 
-MAX_SEEN = 10_000
+MAX_SEEN = 500
 
 COMETBFT_WS_URL = "ws://localhost:26657/websocket"
 logger = logging.getLogger(__name__)
