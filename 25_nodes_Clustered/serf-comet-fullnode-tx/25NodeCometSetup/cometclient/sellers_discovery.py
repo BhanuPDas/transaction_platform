@@ -163,14 +163,6 @@ def select_seller(resources: dict, discovery_results: list) -> dict | None:
         if isinstance(v, dict) and v.get("demand_per_unit", 0) > 0
     }
 
-    if not active:
-        logger.warning("[select_seller] No active resources in buyer request — aborting selection")
-        return None
-
-    if not discovery_results:
-        logger.warning("[select_seller] No sellers returned by discovery — aborting selection")
-        return None
-
     # ----------------------------------------------------------------
     # Step 2: Identify primary resource (highest demand_per_unit)
     # ----------------------------------------------------------------
