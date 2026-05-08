@@ -174,6 +174,7 @@ def select_seller(resources: dict, discovery_results: list) -> dict | None:
     # Buyer's score expectation (D_i) and carbon tolerance (E_i) for primary resource
     buyer_score_expectation = active[primary_resource].get("score", 0.0)
     buyer_carbon_tolerance = resources.get("carbon", {}).get("score", 0.0)
+    logger.info(f"Buyer Carbon tolerance: {buyer_carbon_tolerance}")
 
     logger.info(
         f"[select_seller] Primary resource: '{primary_resource}' | "
@@ -282,7 +283,8 @@ def create_empty_sellers():
         "storage": 0,
         "gpu": 0,
         "price": price,
-        "score": score
+        "score": score,
+        "score_carbon": 0.0
     }
 
 
@@ -306,7 +308,8 @@ def create_seller(raw_seller):
         "storage": raw_seller.get("storage", 0),
         "gpu": raw_seller.get("gpu", 0),
         "price": price,
-        "score": score
+        "score": score,
+        "score_carbon": raw_seller.get("score_carbon", 0.0)
     }
 
 
