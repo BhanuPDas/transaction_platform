@@ -221,19 +221,47 @@ func ComputeEndTime(tx TransferTransaction) (time.Time, time.Time, error) {
 func HasHighBudget(buyer BuyerInfo, seller SellerInfo) (bool, error) {
 	totalBudget := 0.0
 	totalPrice := 0.0
-	for resource, demand := range buyer.Resources {
+	resourceMapping := map[string]struct {
+		Demand ResourceDemand
+	}{
+		"cpu": {
+			Demand: buyer.Resources.VCPU,
+		},
+		"ram": {
+			Demand: buyer.Resources.RAM,
+		},
+		"storage": {
+			Demand: buyer.Resources.Storage,
+		},
+		"gpu": {
+			Demand: buyer.Resources.VGPU,
+		},
+	}
+	for resource, data := range resourceMapping {
+		demand := data.Demand
+
 		if demand.DemandPerUnit == 0 {
 			continue
 		}
+
 		sellerPrice, ok := seller.Price[resource]
 		if !ok {
-			return false, fmt.Errorf("seller %s does not have pricing for resource: %s", seller.IP, resource)
+			return false, fmt.Errorf(
+				"seller %s does not have pricing for resource: %s",
+				seller.IP,
+				resource,
+			)
 		}
+
 		totalBudget += demand.Budget
 		totalPrice += sellerPrice
 	}
 	if totalBudget == 0 {
-		return false, fmt.Errorf("no valid resource demand found for buyer %s", buyer.Name)
+		return false, fmt.Errorf(
+			"no valid resource demand found for buyer %s",
+			buyer.Name,
+		)
 	}
+
 	return totalBudget >= totalPrice, nil
 }

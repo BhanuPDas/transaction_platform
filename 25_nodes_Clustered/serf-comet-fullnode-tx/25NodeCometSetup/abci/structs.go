@@ -8,24 +8,35 @@ import (
 )
 
 type SellerInfo struct {
-	Name    string             `json:"name"`
-	IP      string             `json:"ip"`
-	CPU     int64              `json:"cpu"`
-	RAM     float64            `json:"ram"`
-	Storage int64              `json:"storage"`
-	GPU     int64              `json:"gpu"`
-	Price   map[string]float64 `json:"price"`
-	Score   map[string]float64 `json:"score"`
+	Name        string             `json:"name"`
+	IP          string             `json:"ip"`
+	CPU         int64              `json:"cpu"`
+	RAM         float64            `json:"ram"`
+	Storage     int64              `json:"storage"`
+	GPU         int64              `json:"gpu"`
+	Price       map[string]float64 `json:"price"`
+	Score       map[string]float64 `json:"score"`
+	ScoreCarbon float64            `json:"score_carbon"`
 }
 type ResourceDemand struct {
 	DemandPerUnit int64   `json:"demand_per_unit"`
 	Score         float64 `json:"score"`
 	Budget        float64 `json:"budget"`
 }
+type Carbon struct {
+	Score float64 `json:"score"`
+}
+type BuyerResources struct {
+	RAM     ResourceDemand `json:"ram"`
+	Storage ResourceDemand `json:"storage"`
+	VCPU    ResourceDemand `json:"vcpu"`
+	VGPU    ResourceDemand `json:"vgpu"`
+	Carbon  Carbon         `json:"carbon"`
+}
 type BuyerInfo struct {
-	Name      string                    `json:"name"`
-	IP        string                    `json:"ip"`
-	Resources map[string]ResourceDemand `json:"resource"`
+	Name      string         `json:"name"`
+	IP        string         `json:"ip"`
+	Resources BuyerResources `json:"resource"`
 }
 type TransferTransaction struct {
 	Type          string     `json:"type"`
