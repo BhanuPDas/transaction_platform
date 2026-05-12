@@ -243,10 +243,10 @@ func HasHighBudget(buyer BuyerInfo, seller SellerInfo) (bool, error) {
 		if demand.DemandPerUnit == 0 {
 			continue
 		}
-		fmt.Printf("[DEBUG] resource=%s DemandPerUnit=%d Budget=%.4f\n",
-			resource, demand.DemandPerUnit, demand.Budget)
 
 		sellerPrice, ok := seller.Price[resource]
+		fmt.Printf("[DEBUG] resource=%s DemandPerUnit=%d Budget=%.4f Seller Price=%.4f\n",
+			resource, demand.DemandPerUnit, demand.Budget, sellerPrice)
 		if !ok {
 			return false, fmt.Errorf(
 				"seller %s does not have pricing for resource: %s",
