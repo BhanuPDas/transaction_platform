@@ -224,7 +224,7 @@ func HasHighBudget(buyer BuyerInfo, seller SellerInfo) (bool, error) {
 	resourceMapping := map[string]struct {
 		Demand ResourceDemand
 	}{
-		"cpu": {
+		"vcpu": {
 			Demand: buyer.Resources.VCPU,
 		},
 		"ram": {
@@ -233,7 +233,7 @@ func HasHighBudget(buyer BuyerInfo, seller SellerInfo) (bool, error) {
 		"storage": {
 			Demand: buyer.Resources.Storage,
 		},
-		"gpu": {
+		"vgpu": {
 			Demand: buyer.Resources.VGPU,
 		},
 	}
@@ -243,6 +243,8 @@ func HasHighBudget(buyer BuyerInfo, seller SellerInfo) (bool, error) {
 		if demand.DemandPerUnit == 0 {
 			continue
 		}
+		fmt.Printf("[DEBUG] resource=%s DemandPerUnit=%d Budget=%.4f\n",
+			resource, demand.DemandPerUnit, demand.Budget)
 
 		sellerPrice, ok := seller.Price[resource]
 		if !ok {
@@ -262,6 +264,7 @@ func HasHighBudget(buyer BuyerInfo, seller SellerInfo) (bool, error) {
 			buyer.Name,
 		)
 	}
+	fmt.Printf("[DEBUG] totalBudget=%.4f totalPrice=%.4f\n", totalBudget, totalPrice)
 
 	return totalBudget >= totalPrice, nil
 }
