@@ -57,13 +57,13 @@ reset_cometbft() {
     docker exec "$container" bash -c "cd /root && rm -rf abci && mkdir -p abci && rm -rf cometclient && mkdir -p cometclient"
     docker cp "./abci/." "$container":/root/abci/ || { echo "Failed to copy abci files to $container"; exit 1; }
     docker cp "./cometclient/." "$container":/root/cometclient/ || { echo "Failed to copy main.py file to $container"; exit 1; }
-#    docker exec "$container" bash -c "cd /root/abci && /usr/local/go/bin/go clean -modcache && /usr/local/go/bin/go mod tidy && /usr/local/go/bin/go build -o /root/abci-app *.go"
-#    if (( i < 12 )); then
-#     docker exec -d "$container" bash -c "cd /root/abci/clusterAConfig && nohup /root/abci-app > /root/logs/abci.log 2>&1"
-#    else
-#      docker exec -d "$container" bash -c "cd /root/abci/clusterBConfig && nohup /root/abci-app > /root/logs/abci.log 2>&1"
-#    fi
-#    sleep 2
+    docker exec "$container" bash -c "cd /root/abci && /usr/local/go/bin/go clean -modcache && /usr/local/go/bin/go mod tidy && /usr/local/go/bin/go build -o /root/abci-app *.go"
+    if (( i < 12 )); then
+     docker exec -d "$container" bash -c "cd /root/abci/clusterAConfig && nohup /root/abci-app > /root/logs/abci.log 2>&1"
+    else
+      docker exec -d "$container" bash -c "cd /root/abci/clusterBConfig && nohup /root/abci-app > /root/logs/abci.log 2>&1"
+    fi
+    sleep 2
 
     echo "[7] Restarting CometBFT..."
 #    docker exec "$container" rm -f /root/.cometbft/config/genesis.json
@@ -74,15 +74,15 @@ reset_cometbft() {
 #    fi
 #    nodeId=$(docker exec "$container" /root/go/bin/cometbft show-node-id)
 #    docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"rpc_addr\":\"$nodeId@$ip_address:26656\"}}" http://127.0.0.1:5555/updatetags
-#    docker exec -d "$container" bash -c "nohup /root/go/bin/cometbft node > /root/logs/cometbft.log 2>&1"
-#    sleep 3
+    docker exec -d "$container" bash -c "nohup /root/go/bin/cometbft node > /root/logs/cometbft.log 2>&1"
+    sleep 3
 
     echo "[8] Verifying logs..."
-#    docker exec "$container" tail -n 20 /root/logs/abci.log
-#    docker exec "$container" tail -n 20 /root/logs/cometbft.log
-#    if (( i != 0 && i != 4 && i != 12 && i != 13 && i != 14 )); then
-#      docker exec -d "$container" bash -c "cd /root/cometclient && nohup python3 tx_api.py > /root/logs/tx_api.log 2>&1 &"
-#    fi
+    docker exec "$container" tail -n 20 /root/logs/abci.log
+    docker exec "$container" tail -n 20 /root/logs/cometbft.log
+    if (( i != 0 && i != 4 && i != 12 && i != 13 && i != 14 )); then
+      docker exec -d "$container" bash -c "cd /root/cometclient && nohup python3 tx_api.py > /root/logs/tx_api.log 2>&1 &"
+    fi
     echo "✔ Done with $container"
   done
 }
