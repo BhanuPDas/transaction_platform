@@ -45,7 +45,6 @@ type TransferTransaction struct {
 	Amount        int64      `json:"amount"`
 	TxStartTs     string     `json:"tx_start_ts"`
 	LeaseDuration int64      `json:"lease_duration"`
-	SellerEnergy  float64    `json:"seller_energy"`
 }
 
 type Validators struct {
