@@ -25,8 +25,7 @@ def create_tx_payload(buyer, seller, amount, tx_start_ts, lease_duration):
         "seller": seller,
         "amount": amount,
         "tx_start_ts": tx_start_ts,
-        "lease_duration": lease_duration,
-        "seller_energy": 0.0
+        "lease_duration": lease_duration
     }
     logger.info(f"Prepared transaction: {json.dumps(tx)}")
     return tx
