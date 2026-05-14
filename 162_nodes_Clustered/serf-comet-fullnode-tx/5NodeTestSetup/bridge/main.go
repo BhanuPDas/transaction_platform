@@ -13,7 +13,7 @@ import (
 	cmn "github.com/cometbft/cometbft/libs/bytes"
 	cometbftmempool "github.com/cometbft/cometbft/mempool" // For the Mempool interface and TxInfo
 	cometbfttypes "github.com/cometbft/cometbft/types"
-	"github.com/youruser/serf-comet-bridge/p2p" 
+	"github.com/youruser/serf-comet-bridge/p2p"
 )
 
 type MockMempool struct{}
@@ -21,7 +21,7 @@ type MockMempool struct{}
 func (mm *MockMempool) CheckTx(
 	tx cometbfttypes.Tx,
 	cb func(*abcitypes.ResponseCheckTx), // Callback for the actual CheckTx response
-	txInfo cometbftmempool.TxInfo,      // Information about the transaction
+	txInfo cometbftmempool.TxInfo, // Information about the transaction
 ) error {
 	// Log the received transaction. TxInfo does not have a public 'Sender' field.
 	log.Printf("Mock Mempool received transaction: %s (TxInfo: %+v)", cmn.HexBytes(tx).String(), txInfo)
@@ -118,7 +118,6 @@ func (mm *MockMempool) RemoveTxByKey(txKey cometbfttypes.TxKey) error {
 	return nil
 }
 
-
 // Ensure MockMempool satisfies the cometbftmempool.Mempool interface
 var _ cometbftmempool.Mempool = (*MockMempool)(nil)
 
@@ -163,4 +162,3 @@ func main() {
 
 	log.Println("Application gracefully stopped.")
 }
-

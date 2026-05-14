@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	SerfReactorName = "SerfReactor"
+	SerfReactorName       = "SerfReactor"
 	SerfDiscoveryInterval = 5 * time.Second // How often to check Serf members
 )
 
@@ -23,7 +23,7 @@ type SerfReactor struct {
 	config     *config.P2PConfig
 	logger     log.Logger
 	serfAgent  *serf.Serf
-	nodeKey    *NodeKey // CometBFT's node key, needed to identify self
+	nodeKey    *NodeKey         // CometBFT's node key, needed to identify self
 	peerAddrs  chan PeerAddress // Channel to send discovered peers to the Switch
 	peersMutex sync.Mutex
 	knownPeers map[ID]PeerAddress // Keep track of peers known by CometBFT
@@ -32,8 +32,8 @@ type SerfReactor struct {
 // NewSerfReactor creates a new SerfReactor.
 func NewSerfReactor(p2pConfig *config.P2PConfig, nodeKey *NodeKey, logger log.Logger) *SerfReactor {
 	sr := &SerfReactor{
-		config:     p2pConfig,
-		logger:     logger.
+		config: p2pConfig,
+		logger: logger.
 			With("module", "p2p").
 			With("reactor", SerfReactorName),
 		nodeKey:    nodeKey,
@@ -48,8 +48,8 @@ func NewSerfReactor(p2pConfig *config.P2PConfig, nodeKey *NodeKey, logger log.Lo
 func (sr *SerfReactor) OnStart() error {
 	// 1. Initialize Serf Agent
 	serfConfig := serf.DefaultConfig()
-	serfConfig.NodeName = string(sr.nodeKey.ID()) // Use CometBFT NodeID as Serf NodeName
-	serfConfig.BindAddr = sr.config.ListenAddress // Serf will bind to the same address as CometBFT P2P
+	serfConfig.NodeName = string(sr.nodeKey.ID())                 // Use CometBFT NodeID as Serf NodeName
+	serfConfig.BindAddr = sr.config.ListenAddress                 // Serf will bind to the same address as CometBFT P2P
 	serfConfig.Logger = sr.logger.With("component", "serf-agent") // Use CometBFT logger
 
 	// Parse the listen address for the Serf bind port

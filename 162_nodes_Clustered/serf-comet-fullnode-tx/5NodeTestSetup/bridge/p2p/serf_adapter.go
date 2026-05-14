@@ -23,7 +23,7 @@ type SerfMember struct {
 
 // ParsedSerfEvent is a struct to hold the parsed user event data
 type ParsedSerfEvent struct {
-	Name      string
+	Name       string
 	PayloadHex string // Raw hex string of the payload
 }
 
@@ -131,7 +131,7 @@ func StartSerfMonitor(
 			} else if payloadMatch := payloadLineRe.FindStringSubmatch(line); len(payloadMatch) > 1 {
 				if inPotentialEventInfoBlock { // Only process if we are in an event info block
 					currentEventPayloadHex = strings.ReplaceAll(payloadMatch[1], " ", "") // Extract hex string, remove spaces, 0x, and commas
-					
+
 					// If we have a name and payload, send the event to the channel
 					if currentEventName != "" && currentEventPayloadHex != "" {
 						eventChan <- ParsedSerfEvent{Name: currentEventName, PayloadHex: currentEventPayloadHex}
@@ -152,7 +152,7 @@ func StartSerfMonitor(
 					eventName := eventLogMatch[1]
 					log.Printf("INFO: (p2p/serf_adapter) Parsed Serf user event (simple line): Name='%s'", eventName)
 					// No payload to dispatch from this line format, so we don't send to channel.
-					
+
 					inPotentialEventInfoBlock = false // Reset state
 					currentEventName = ""
 					currentEventPayloadHex = ""
@@ -206,8 +206,8 @@ func StartSerfMonitor(
 }
 
 func min(a, b int) int {
-    if a < b {
-        return a
-    }
-    return b
+	if a < b {
+		return a
+	}
+	return b
 }
