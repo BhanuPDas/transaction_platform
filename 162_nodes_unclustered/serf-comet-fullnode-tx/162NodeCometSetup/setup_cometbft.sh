@@ -2,7 +2,7 @@
 
 # List of containers (Ubuntu nodes)
 containers=()
-for i in {1..162}; do
+for i in {1..25}; do
   containers+=(clab-century-serf$i)
 done
 
@@ -39,7 +39,7 @@ setup_multinodes_cometbft() {
     goVersion=$(docker exec "$container" /usr/local/go/bin/go version)
     echo "$goVersion installation complete."
 
-    docker exec "$container" bash -c "cd /root && mkdir -p logs"
+    docker exec "$container" bash -c "cd /root && mkdir -p logs && mkdir -p cometclient"
     
     # Install CometBFT
     echo "Installing Cometbft..."
@@ -65,7 +65,7 @@ setup_multinodes_cometbft() {
     docker exec "$container" mv /root/.cometbft/config/genesis.json /root/.cometbft/config/genesis_prsv.json
     docker cp "./genesis.json" "$container":/root/.cometbft/config/
     echo "Starting Cometbft..."
-    docker exec -d "$container" bash -c "nohup /root/go/bin/cometbft node > /root/logs/cometbft.log 2>&1"
+    #docker exec -d "$container" bash -c "nohup /root/go/bin/cometbft node > /root/logs/cometbft.log 2>&1"
 
     # Add tags to Serf
     echo "Setting Serf Tags for $container..."
@@ -73,12 +73,11 @@ setup_multinodes_cometbft() {
     
     # Install Python
     echo "Installing Python..."
-    docker exec "$container" bash -c "DEBIAN_FRONTEND=noninteractive apt update && apt upgrade -y && apt install -y python3 python3-pip && pip3 install --no-cache-dir flask requests redis"
+    docker exec "$container" bash -c "DEBIAN_FRONTEND=noninteractive apt update && apt upgrade -y && apt install -y python3 python3-pip && pip3 install --no-cache-dir flask requests redis websockets"
     pVersion=$(docker exec "$container" python3 --version)
     echo "$pVersion installation complete."
     echo "Copying Serf Client and Cometbft client..."
-    docker cp "./cometclient/main.py" "$container":/root/ || { echo "Failed to copy main.py file to $container"; exit 1; }
-    docker cp "./cometclient/validator_tx.py" "$container":/root/ || { echo "Failed to copy main.py file to $container"; exit 1; }
+    docker cp "./cometclient/." "$container":/root/cometclient/ || { echo "Failed to copy main.py file to $container"; exit 1; }
 
     echo "Cometbft setup in $container is complete."
     

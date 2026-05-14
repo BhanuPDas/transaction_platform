@@ -2,7 +2,7 @@
 
 BASE_NAME="clab-century-serf"
 SERF_PORT=5555
-RAND=$((1 + RANDOM % 162))
+RAND=$((1 + RANDOM % 25))
 CONTAINER_NAME="${BASE_NAME}${RAND}"
 echo "➡ Selected container: $CONTAINER_NAME"
 echo "➡ Fetching Serf members..."

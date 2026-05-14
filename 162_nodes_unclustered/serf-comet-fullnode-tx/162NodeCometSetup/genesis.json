@@ -31,10 +31,10 @@
   },
   "validators": [
     {
-          "address": "852EBB16370F8C61D40F14796ED50A9C468BF129",
+          "address": "F331CFC2B8CB68BBA511CB0E767F8B15F2B672A8",
           "pub_key": {
             "type": "tendermint/PubKeyEd25519",
-            "value": "pqUI9LZ+YUzAxXH6rhz/HgrxAKg9GLB2h6VH0oO1dOw="
+            "value": "hZ0wU0f1Nh+DFlCf8gaCkuFsEyBcUV9b5vWU6W5VJCs="
           },
           "power": "5",
           "name": "serf10"

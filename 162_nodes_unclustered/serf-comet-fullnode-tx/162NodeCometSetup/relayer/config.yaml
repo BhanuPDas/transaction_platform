@@ -1,0 +1,11 @@
+clusters:
+  - id: "cluster_a"
+    url: "http://clab-century-serf1:26657"
+  - id: "cluster_b"
+    url: "http://clab-century-serf13:26657"
+  - id: "cluster_c"
+    url: "http://clab-century-serf25:26657"
+
+query: "tm.event='Tx' AND relay_transfer.from EXISTS"
+broadcast_mode: "async"
+request_timeout: 5s
