@@ -105,7 +105,7 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 		app.Logger.Info("Emitting failedTx event", "txHash", txHash, "reason", txDetails.Log)
 		return &types.ExecTxResult{Code: CodeTypeOK, Log: "Executed", Events: events}
 	}
-	hasBudget, _ := HasHighBudget(tx.Buyer, tx.Seller)
+	hasBudget, _ := app.HasHighBudget(tx.Buyer, tx.Seller)
 	if !hasBudget {
 		txDetails := TxDetails{
 			Status:    StatusFailed,
@@ -218,25 +218,16 @@ func ComputeEndTime(tx TransferTransaction) (time.Time, time.Time, error) {
 	return startTime, endTime, nil
 }
 
-func HasHighBudget(buyer BuyerInfo, seller SellerInfo) (bool, error) {
-	totalBudget := 0.0
-	totalPrice := 0.0
+func (app *MyApp) HasHighBudget(buyer BuyerInfo, seller SellerInfo) (bool, error) {
 	resourceMapping := map[string]struct {
 		Demand ResourceDemand
 	}{
-		"vcpu": {
-			Demand: buyer.Resources.VCPU,
-		},
-		"ram": {
-			Demand: buyer.Resources.RAM,
-		},
-		"storage": {
-			Demand: buyer.Resources.Storage,
-		},
-		"vgpu": {
-			Demand: buyer.Resources.VGPU,
-		},
+		"vcpu":    {Demand: buyer.Resources.VCPU},
+		"ram":     {Demand: buyer.Resources.RAM},
+		"storage": {Demand: buyer.Resources.Storage},
+		"vgpu":    {Demand: buyer.Resources.VGPU},
 	}
+
 	for resource, data := range resourceMapping {
 		demand := data.Demand
 
@@ -245,8 +236,6 @@ func HasHighBudget(buyer BuyerInfo, seller SellerInfo) (bool, error) {
 		}
 
 		sellerPrice, ok := seller.Price[resource]
-		fmt.Printf("[DEBUG] resource=%s DemandPerUnit=%d Budget=%.4f Seller Price=%.4f\n",
-			resource, demand.DemandPerUnit, demand.Budget, sellerPrice)
 		if !ok {
 			return false, fmt.Errorf(
 				"seller %s does not have pricing for resource: %s",
@@ -255,16 +244,18 @@ func HasHighBudget(buyer BuyerInfo, seller SellerInfo) (bool, error) {
 			)
 		}
 
-		totalBudget += demand.Budget
-		totalPrice += sellerPrice
-	}
-	if totalBudget == 0 {
-		return false, fmt.Errorf(
-			"no valid resource demand found for buyer %s",
-			buyer.Name,
-		)
-	}
-	fmt.Printf("[DEBUG] totalBudget=%.4f totalPrice=%.4f\n", totalBudget, totalPrice)
+		app.Logger.Info(fmt.Sprintf("Resource=%s DemandPerUnit=%d Budget=%.4f SellerPrice=%.4f\n",
+			resource, demand.DemandPerUnit, demand.Budget, sellerPrice))
 
-	return totalBudget >= totalPrice, nil
+		if demand.Budget < sellerPrice {
+			app.Logger.Info(fmt.Sprintf("Budget check FAILED for resource=%s: buyer budget %.4f < seller price %.4f\n",
+				resource, demand.Budget, sellerPrice))
+			return false, nil
+		}
+
+		app.Logger.Info(fmt.Sprintf("Budget check PASSED for resource=%s: buyer budget %.4f >= seller price %.4f\n",
+			resource, demand.Budget, sellerPrice))
+	}
+
+	return true, nil
 }

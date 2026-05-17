@@ -2,7 +2,7 @@
 
 # List of containers (Ubuntu nodes)
 containers=()
-for i in {1..25}; do
+for i in {1..162}; do
   containers+=(clab-century-serf$i)
 done
 
