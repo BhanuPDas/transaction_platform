@@ -51,8 +51,8 @@ setup_multinodes_cometbft() {
     echo "Configuring ABCI server..."
     docker exec "$container" bash -c "cd /root && mkdir -p abci"
     docker cp "./abci/." "$container":/root/abci/ || { echo "Failed to copy abci files to $container"; exit 1; }
-    docker exec "$container" bash -c "cd /root/abci && /usr/local/go/bin/go clean -modcache && /usr/local/go/bin/go mod tidy && /usr/local/go/bin/go build -o /root/abci-app *.go"
-    docker exec -d "$container" bash -c "nohup /root/abci-app > /root/logs/abci.log 2>&1"
+#    docker exec "$container" bash -c "cd /root/abci && /usr/local/go/bin/go clean -modcache && /usr/local/go/bin/go mod tidy && /usr/local/go/bin/go build -o /root/abci-app *.go"
+#    docker exec -d "$container" bash -c "nohup /root/abci-app > /root/logs/abci.log 2>&1"
 
     # Init CometBFT
     echo "Configuring Cometbft..."
@@ -65,11 +65,11 @@ setup_multinodes_cometbft() {
     docker exec "$container" mv /root/.cometbft/config/genesis.json /root/.cometbft/config/genesis_prsv.json
     docker cp "./genesis.json" "$container":/root/.cometbft/config/
     echo "Starting Cometbft..."
-    #docker exec -d "$container" bash -c "nohup /root/go/bin/cometbft node > /root/logs/cometbft.log 2>&1"
+#    docker exec -d "$container" bash -c "nohup /root/go/bin/cometbft node > /root/logs/cometbft.log 2>&1"
 
     # Add tags to Serf
-    echo "Setting Serf Tags for $container..."
-    docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"rpc_addr\":\"$nodeId@$ip_address:26656\"}}" http://127.0.0.1:5555/updatetags
+#    echo "Setting Serf Tags for $container..."
+#    docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"rpc_addr\":\"$nodeId@$ip_address:26656\"}}" http://127.0.0.1:5555/updatetags
     
     # Install Python
     echo "Installing Python..."
@@ -77,7 +77,7 @@ setup_multinodes_cometbft() {
     pVersion=$(docker exec "$container" python3 --version)
     echo "$pVersion installation complete."
     echo "Copying Serf Client and Cometbft client..."
-    docker cp "./cometclient/." "$container":/root/cometclient/ || { echo "Failed to copy main.py file to $container"; exit 1; }
+    docker cp "./cometclient/." "$container":/root/cometclient/ || { echo "Failed to copy py files to $container"; exit 1; }
 
     echo "Cometbft setup in $container is complete."
     
