@@ -3,7 +3,7 @@
 # List of containers (Ubuntu nodes)
 containers=()
 for i in {1..162}; do
-  containers+=(clab-century-serf$i)
+  containers+=(clab-nebula-extended-serf$i)
 done
 
 setup_multinodes_cometbft() {
