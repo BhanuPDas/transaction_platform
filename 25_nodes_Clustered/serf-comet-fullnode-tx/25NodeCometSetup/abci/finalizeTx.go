@@ -85,10 +85,11 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 			TxHash:    txHash,
 			Tx:        tx,
 			TxEndUnix: endTime.Unix(),
-			TxEndTs:   (req.Time.UTC()).Format(time.RFC3339Nano),
+			TxEndTs:   req.Time.UTC().Format(time.RFC3339Nano),
 			Log:       "No Seller Found For The Buyer Demand",
 		}
 		app.SaveTx(txHash, txDetails, endTime)
+		app.deleteBucketEntry(txHash, txDetails.TxEndUnix)
 		txStr, err := json.Marshal(txDetails)
 		if err != nil {
 			app.Logger.Error(fmt.Sprintf("ABCI ERROR: Failed to marshal tx details for the event: %v", err))
@@ -112,10 +113,11 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 			TxHash:    txHash,
 			Tx:        tx,
 			TxEndUnix: endTime.Unix(),
-			TxEndTs:   (req.Time.UTC()).Format(time.RFC3339Nano),
+			TxEndTs:   req.Time.UTC().Format(time.RFC3339Nano),
 			Log:       "Buyer Has Very Low Budget For The Resources",
 		}
 		app.SaveTx(txHash, txDetails, endTime)
+		app.deleteBucketEntry(txHash, txDetails.TxEndUnix)
 		txStr, err := json.Marshal(txDetails)
 		if err != nil {
 			app.Logger.Error(fmt.Sprintf("ABCI ERROR: Failed to marshal tx details for the event: %v", err))
@@ -138,10 +140,11 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 			TxHash:    txHash,
 			Tx:        tx,
 			TxEndUnix: endTime.Unix(),
-			TxEndTs:   (req.Time.UTC()).Format(time.RFC3339Nano),
+			TxEndTs:   req.Time.UTC().Format(time.RFC3339Nano),
 			Log:       "Invalid lease duration, transaction expired before it is processed",
 		}
 		app.SaveTx(txHash, txDetails, endTime)
+		app.deleteBucketEntry(txHash, txDetails.TxEndUnix)
 		txStr, err := json.Marshal(txDetails)
 		if err != nil {
 			app.Logger.Error(fmt.Sprintf("ABCI ERROR: Failed to marshal tx details for the event: %v", err))
