@@ -76,6 +76,7 @@ type MyApp struct {
 	UpdatedValidatorsThisBlock map[string]struct{}
 	Logger                     log.Logger
 	Cls                        []string
+	ValidatorsDirty            bool
 }
 
 type TxDetails struct {

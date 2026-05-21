@@ -3,13 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/pebble/v2"
 	"github.com/cometbft/cometbft/abci/types"
 	cryptoenc "github.com/cometbft/cometbft/crypto/encoding"
-	"strconv"
-	"strings"
 )
 
 const (
@@ -18,114 +18,159 @@ const (
 
 // LoadFromDB loads current State from PebbleDB into memory.
 func (app *MyApp) LoadFromDB() {
-	iter, err := app.State.DB.NewIter(&pebble.IterOptions{
-		LowerBound: []byte("balance:"),
-		UpperBound: []byte("balance~"),
+	const balancePrefix = "balance:"
+	balanceIter, err := app.State.DB.NewIter(&pebble.IterOptions{
+		LowerBound: []byte(balancePrefix),
+		UpperBound: []byte("balance~"), // '~' (0x7E) > any printable char after ':'
 	})
 	if err != nil {
-		app.Logger.Error(fmt.Sprintf("Failed to Iterate Balance Records: %v", err))
+		app.Logger.Error(fmt.Sprintf("LoadFromDB: failed to create balance iterator: %v", err))
+		return
 	}
-	defer func(iter *pebble.Iterator) {
-		if err := iter.Close(); err != nil {
-			app.Logger.Error(fmt.Sprintf("Failed to close Balance iterator: %v", err))
+	defer func() {
+		if err := balanceIter.Close(); err != nil {
+			app.Logger.Error(fmt.Sprintf("LoadFromDB: failed to close balance iterator: %v", err))
 		}
-	}(iter)
+	}()
 
-	count := 0
-	for iter.First(); iter.Valid(); iter.Next() {
-		key := string(iter.Key())
-		if strings.HasPrefix(key, "balance:") {
-			node := strings.TrimPrefix(key, "balance:")
-			valStr1, err := iter.ValueAndErr()
-			if err != nil {
-				app.Logger.Error(fmt.Sprintf("Error getting balance: %v", err))
-				continue
-			}
-			valStr := string(valStr1)
-			val, err := strconv.ParseInt(valStr, 10, 64)
-			if err != nil {
-				app.Logger.Error(fmt.Sprintf("Skipping invalid value for %s: %s", node, valStr))
-				continue
-			}
-			app.State.Ledger[node] = val
-			count++
+	balanceCount := 0
+	for balanceIter.First(); balanceIter.Valid(); balanceIter.Next() {
+		node := string(balanceIter.Key()[len(balancePrefix):])
+
+		valBytes, err := balanceIter.ValueAndErr()
+		if err != nil {
+			app.Logger.Error(fmt.Sprintf("LoadFromDB: failed to read balance value for %s: %v", node, err))
+			continue
 		}
-	}
-	if err := iter.Error(); err != nil {
-		app.Logger.Error(fmt.Sprintf("DB Iterator encountered an error: %v", err))
-	}
-	app.Logger.Info(fmt.Sprintf("Loaded %d balances from Pebble DB: %+v", count, app.State.Ledger))
 
-	iter2, err := app.State.DB.NewIter(&pebble.IterOptions{
-		LowerBound: []byte("validator:"),
+		val, err := strconv.ParseInt(strings.TrimSpace(string(valBytes)), 10, 64)
+		if err != nil {
+			app.Logger.Error(fmt.Sprintf("LoadFromDB: skipping invalid balance for %s: %q", node, string(valBytes)))
+			continue
+		}
+
+		app.State.Ledger[node] = val
+		balanceCount++
+	}
+	if err := balanceIter.Error(); err != nil {
+		app.Logger.Error(fmt.Sprintf("LoadFromDB: balance iterator error: %v", err))
+	}
+	app.Logger.Info(fmt.Sprintf("LoadFromDB: loaded %d balances: %+v", balanceCount, app.State.Ledger))
+
+	const validatorPrefix = "validator:"
+	validatorIter, err := app.State.DB.NewIter(&pebble.IterOptions{
+		LowerBound: []byte(validatorPrefix),
 		UpperBound: []byte("validator~"),
 	})
 	if err != nil {
-		app.Logger.Error(fmt.Sprintf("Failed to create validator records: %v", err))
+		app.Logger.Error(fmt.Sprintf("LoadFromDB: failed to create validator iterator: %v", err))
+		return
 	}
-	defer func(iter2 *pebble.Iterator) {
-		if err := iter2.Close(); err != nil {
-			app.Logger.Error(fmt.Sprintf("Failed to validator close iterator: %v", err))
+	defer func() {
+		if err := validatorIter.Close(); err != nil {
+			app.Logger.Error(fmt.Sprintf("LoadFromDB: failed to close validator iterator: %v", err))
 		}
-	}(iter2)
+	}()
 
 	validatorCount := 0
-	for iter2.First(); iter2.Valid(); iter2.Next() {
-		key := string(iter2.Key())
-		if strings.HasPrefix(key, "validator:") {
-			id := strings.TrimPrefix(key, "validator:")
-			valBytes, err := iter2.ValueAndErr()
-			if err != nil {
-				app.Logger.Error(fmt.Sprintf("Error getting validator: %v", err))
-				continue
-			}
-			var vu types.ValidatorUpdate
-			if err = json.Unmarshal(valBytes, &vu); err != nil {
-				app.Logger.Error(fmt.Sprintf("Failed to deserialize validator %s: %v", id, err))
-				continue
-			}
-			pubKeyBytes := vu.PubKeyBytes
-			app.State.Validator = append(app.State.Validator, vu)
-			pubkey, err := cryptoenc.PubKeyFromTypeAndBytes(vu.PubKeyType, pubKeyBytes)
-			if err != nil {
-				app.Logger.Error(fmt.Sprintf("Failed to decode validator pubkey: %v", err))
-			}
-			addr := string(pubkey.Address())
-			app.ValAddrToPubKeyMap[addr] = pubkey
-			validatorCount++
-		}
-	}
-	app.Logger.Info(fmt.Sprintf("Loaded %d validators from PebbleDB", validatorCount))
-}
+	for validatorIter.First(); validatorIter.Valid(); validatorIter.Next() {
+		id := string(validatorIter.Key()[len(validatorPrefix):])
 
-// SaveToDB persists the current State to Pebble DB.
-func (app *MyApp) SaveToDB() {
-	for node, balance := range app.State.Ledger {
-		key := "balance:" + node
-		val := []byte(fmt.Sprintf("%d", balance))
-		if err := app.State.DB.Set([]byte(key), val, pebble.Sync); err != nil {
-			app.Logger.Error(fmt.Sprintf("Failed to persist %s: %v\n", node, err))
-		}
-	}
-	app.Logger.Info("[SAVE] Balances successfully persisted to Blockchain PebbleDB.")
-
-	for _, valUpdate := range app.State.Validator {
-		pubKeyBytes := valUpdate.PubKeyBytes
-		pubkey, err := cryptoenc.PubKeyFromTypeAndBytes(valUpdate.PubKeyType, pubKeyBytes)
+		valBytes, err := validatorIter.ValueAndErr()
 		if err != nil {
-			app.Logger.Error(fmt.Sprintf("Failed to fetch pub key: %v", err))
-		}
-		key := "validator:" + string(pubkey.Address())
-		jsonBytes, err := json.Marshal(valUpdate)
-		if err != nil {
-			app.Logger.Error(fmt.Sprintf("Failed to serialize validator %s: %v", key, err))
+			app.Logger.Error(fmt.Sprintf("LoadFromDB: failed to read validator value for %s: %v", id, err))
 			continue
 		}
-		if err := app.State.DB.Set([]byte(key), jsonBytes, pebble.Sync); err != nil {
-			app.Logger.Error(fmt.Sprintf("Failed to persist validator %s: %v", key, err))
+		valCopy := append([]byte{}, valBytes...)
+		var vu types.ValidatorUpdate
+		if err := json.Unmarshal(valCopy, &vu); err != nil {
+			app.Logger.Error(fmt.Sprintf("LoadFromDB: failed to deserialize validator %s: %v", id, err))
+			continue
+		}
+
+		app.State.Validator = append(app.State.Validator, vu)
+
+		pubkey, err := cryptoenc.PubKeyFromTypeAndBytes(vu.PubKeyType, vu.PubKeyBytes)
+		if err != nil {
+			app.Logger.Error(fmt.Sprintf("LoadFromDB: failed to decode pubkey for validator %s: %v", id, err))
+			continue
+		}
+
+		app.ValAddrToPubKeyMap[string(pubkey.Address())] = pubkey
+		validatorCount++
+	}
+	if err := validatorIter.Error(); err != nil {
+		app.Logger.Error(fmt.Sprintf("LoadFromDB: validator iterator error: %v", err))
+	}
+	app.Logger.Info(fmt.Sprintf("LoadFromDB: loaded %d validators", validatorCount))
+}
+
+// SaveToDB persists balances and validators to PebbleDB.
+func (app *MyApp) SaveToDB() {
+	batch := app.State.DB.NewBatch()
+	defer func() {
+		if err := batch.Close(); err != nil {
+			app.Logger.Error(fmt.Sprintf("SaveToDB: failed to close batch: %v", err))
+		}
+	}()
+
+	batchErr := false
+	balanceCount := 0
+	for node, balance := range app.State.Ledger {
+		key := "balance:" + node
+		val := strconv.AppendInt(nil, balance, 10) // allocation-free int64 → []byte
+		if err := batch.Set([]byte(key), val, nil); err != nil {
+			app.Logger.Error(fmt.Sprintf("SaveToDB: batch.Set balance failed for %s: %v", node, err))
+			batchErr = true
+			break
+		}
+		balanceCount++
+	}
+	if batchErr {
+		app.Logger.Error("SaveToDB: aborting batch due to balance write error")
+		return
+	}
+
+	validatorCount := 0
+	if app.ValidatorsDirty {
+		for _, valUpdate := range app.State.Validator {
+			pubkey, err := cryptoenc.PubKeyFromTypeAndBytes(valUpdate.PubKeyType, valUpdate.PubKeyBytes)
+			if err != nil {
+				app.Logger.Error(fmt.Sprintf("SaveToDB: failed to decode pubkey, skipping validator: %v", err))
+				continue
+			}
+			key := "validator:" + string(pubkey.Address())
+			jsonBytes, err := json.Marshal(valUpdate)
+			if err != nil {
+				app.Logger.Error(fmt.Sprintf("SaveToDB: failed to serialize validator %s: %v", key, err))
+				continue
+			}
+			if err := batch.Set([]byte(key), jsonBytes, nil); err != nil {
+				app.Logger.Error(fmt.Sprintf("SaveToDB: batch.Set validator failed for %s: %v", key, err))
+				batchErr = true
+				break
+			}
+			validatorCount++
+		}
+		if batchErr {
+			app.Logger.Error("SaveToDB: aborting batch due to validator write error")
+			return
 		}
 	}
-	app.Logger.Info("Validators successfully persisted to PebbleDB.")
+
+	if err := batch.Commit(pebble.Sync); err != nil {
+		app.Logger.Error(fmt.Sprintf("SaveToDB: batch commit failed: %v", err))
+		return
+	}
+
+	if app.ValidatorsDirty {
+		app.ValidatorsDirty = false
+	}
+
+	app.Logger.Info(fmt.Sprintf(
+		"SaveToDB: persisted %d balances, %d validators (single fsync, validatorsDirty was %v)",
+		balanceCount, validatorCount, validatorCount > 0,
+	))
 }
 
 // getBucket returns a 10-minute truncated RFC3339 UTC timestamp string.
@@ -172,8 +217,6 @@ func (app *MyApp) SaveTx(txHash string, txDetails TxDetails, endTime time.Time) 
 }
 
 // deleteBucketEntry removes the bucket index key for a given txHash and endTime.
-// This must be called whenever a TX transitions out of StatusOnGoing so that
-// ProcessExpiredTxs stops visiting it on every subsequent block.
 func (app *MyApp) deleteBucketEntry(txHash string, txEndUnix int64) {
 	endTime := time.Unix(txEndUnix, 0).UTC()
 	bKey := bucketKey(endTime, txHash)
@@ -190,7 +233,6 @@ func (app *MyApp) deleteBucketEntry(txHash string, txEndUnix int64) {
 func (app *MyApp) ProcessExpiredTxs(req *types.FinalizeBlockRequest) {
 	now := req.Time.UTC()
 
-	// Upper bound: all bucket keys whose window timestamp <= current window.
 	upperBound := fmt.Sprintf("bucket:%s~", getBucket(now))
 
 	iter, err := app.State.DB.NewIter(&pebble.IterOptions{
@@ -208,7 +250,6 @@ func (app *MyApp) ProcessExpiredTxs(req *types.FinalizeBlockRequest) {
 	}(iter)
 
 	for iter.First(); iter.Valid(); iter.Next() {
-		// The value stored in the bucket entry is the txHash (written by SaveTx).
 		val, err := iter.ValueAndErr()
 		if err != nil {
 			app.Logger.Error(fmt.Sprintf("ProcessExpiredTxs: failed to read bucket value: %v", err))
@@ -250,7 +291,6 @@ func (app *MyApp) ProcessExpiredTxs(req *types.FinalizeBlockRequest) {
 			continue
 		}
 
-		// Only expire if we have actually passed the TX end time.
 		if now.Unix() < txDetails.TxEndUnix {
 			continue
 		}
