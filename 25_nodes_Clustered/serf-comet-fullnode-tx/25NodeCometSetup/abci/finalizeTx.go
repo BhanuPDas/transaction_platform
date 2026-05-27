@@ -27,7 +27,7 @@ func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockReque
 	for _, txBytes := range req.Txs {
 		decodedStrTx, err2 := base64.StdEncoding.DecodeString(string(txBytes))
 		if err2 != nil {
-			app.Logger.Error(fmt.Sprintf("ABCI ERROR: Failed to base64 decode tx: %v, Payload: %s", err2, string(txBytes)))
+			app.Logger.Error(fmt.Sprintf("Failed to base64 decode tx: %v, Payload: %s", err2, string(txBytes)))
 			txResults = append(txResults, &types.ExecTxResult{
 				Code: 1,
 				Log:  "Failed to base64 decode tx",
@@ -61,6 +61,7 @@ func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockReque
 
 func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest) *types.ExecTxResult {
 	var tx TransferTransaction
+	var events []types.Event
 	if err := json.Unmarshal(decodedStrTx, &tx); err != nil {
 		return &types.ExecTxResult{Code: 2, Log: "Bad JSON"}
 	}
@@ -74,7 +75,7 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 	}
 	startTime, endTime, err := ComputeEndTime(tx)
 	if err != nil {
-		app.Logger.Error(fmt.Sprintf("ABCI ERROR: Failed to compute end time: %v", err))
+		app.Logger.Error(fmt.Sprintf("Failed to compute end time: %v", err))
 		app.Logger.Error(fmt.Sprintf("Invalid time format: %v", err))
 		return &types.ExecTxResult{Code: 3, Log: fmt.Sprintf("Invalid tx_start_ts: %v", err)}
 	}
@@ -92,9 +93,9 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 		app.deleteBucketEntry(txHash, txDetails.TxEndUnix)
 		txStr, err := json.Marshal(txDetails)
 		if err != nil {
-			app.Logger.Error(fmt.Sprintf("ABCI ERROR: Failed to marshal tx details for the event: %v", err))
+			app.Logger.Error(fmt.Sprintf("Failed to marshal tx details for the event: %v", err))
 		}
-		var events = []types.Event{
+		events = []types.Event{
 			{
 				Type: "failedTx",
 				Attributes: []types.EventAttribute{
@@ -120,9 +121,9 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 		app.deleteBucketEntry(txHash, txDetails.TxEndUnix)
 		txStr, err := json.Marshal(txDetails)
 		if err != nil {
-			app.Logger.Error(fmt.Sprintf("ABCI ERROR: Failed to marshal tx details for the event: %v", err))
+			app.Logger.Error(fmt.Sprintf("Failed to marshal tx details for the event: %v", err))
 		}
-		var events = []types.Event{
+		events = []types.Event{
 			{
 				Type: "failedTx",
 				Attributes: []types.EventAttribute{
@@ -147,9 +148,9 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 		app.deleteBucketEntry(txHash, txDetails.TxEndUnix)
 		txStr, err := json.Marshal(txDetails)
 		if err != nil {
-			app.Logger.Error(fmt.Sprintf("ABCI ERROR: Failed to marshal tx details for the event: %v", err))
+			app.Logger.Error(fmt.Sprintf("Failed to marshal tx details for the event: %v", err))
 		}
-		var events = []types.Event{
+		events = []types.Event{
 			{
 				Type: "expiredTx",
 				Attributes: []types.EventAttribute{
@@ -164,37 +165,36 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 
 	fromBalance, fromExists := app.State.Ledger[tx.Buyer.Name]
 	_, toExists := app.State.Ledger[tx.Seller.Name]
-	var events []types.Event
 	if fromExists && toExists {
 		if fromBalance < tx.Amount {
+			app.Logger.Info("Insufficient funds:", "fromBalance", fromBalance, "toBalance", tx.Amount)
 			return &types.ExecTxResult{Code: 5, Log: "Insufficient funds"}
 		}
 		app.State.Ledger[tx.Buyer.Name] -= tx.Amount
 		app.State.Ledger[tx.Seller.Name] += tx.Amount
-	}
-	if fromExists && !toExists {
-		if fromBalance < tx.Amount {
-			return &types.ExecTxResult{Code: 5, Log: "Insufficient funds"}
-		}
-		app.State.Ledger[tx.Buyer.Name] -= tx.Amount
-		events = []types.Event{
-			{
-				Type: "relay_transfer",
-				Attributes: []types.EventAttribute{
-					{Key: "from", Value: tx.Buyer.Name, Index: true},
-					{Key: "to", Value: tx.Seller.Name, Index: true},
-					{Key: "amount", Value: strconv.FormatInt(tx.Amount, 10), Index: true},
-					{Key: "timestamp", Value: tx.TxStartTs, Index: false},
-				},
-			},
-		}
 
+	} else if fromExists {
+		if fromBalance < tx.Amount {
+			app.Logger.Info("Insufficient funds:", "fromBalance", fromBalance, "toBalance", tx.Amount)
+			return &types.ExecTxResult{Code: 5, Log: "Insufficient funds"}
+		}
+		app.State.Ledger[tx.Buyer.Name] -= tx.Amount
+		events = append(events, types.Event{
+			Type: "relay_transfer",
+			Attributes: []types.EventAttribute{
+				{Key: "from", Value: tx.Buyer.Name, Index: true},
+				{Key: "to", Value: tx.Seller.Name, Index: true},
+				{Key: "amount", Value: strconv.FormatInt(tx.Amount, 10), Index: true},
+				{Key: "timestamp", Value: tx.TxStartTs, Index: false},
+			},
+		})
 		app.Logger.Info("Relay processing", "from", tx.Buyer.Name, "to", tx.Seller.Name, "fromExists", fromExists, "toExists", toExists)
-	}
-	if !fromExists && toExists {
+
+	} else if toExists {
 		app.State.Ledger[tx.Seller.Name] += tx.Amount
-	}
-	if !fromExists && !toExists {
+
+	} else {
+		app.Logger.Info("Transaction not relevant to this cluster", "from", tx.Buyer.Name, "to", tx.Seller.Name)
 		return &types.ExecTxResult{Code: 4, Log: "transaction not relevant to this cluster"}
 	}
 	txDetails := TxDetails{
@@ -205,6 +205,18 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 		Log:       "Processing Transaction",
 	}
 	app.SaveTx(txHash, txDetails, endTime)
+	txStr, err := json.Marshal(txDetails)
+	if err != nil {
+		app.Logger.Error(fmt.Sprintf("Failed to marshal tx details for the OnGoing event: %v", err))
+	}
+	events = append(events, types.Event{
+		Type: "ongoingTx",
+		Attributes: []types.EventAttribute{
+			{Key: "status", Value: txDetails.Status, Index: true},
+			{Key: "tx", Value: string(txStr), Index: true},
+		},
+	})
+	app.Logger.Info("Emitting OnGoingTx event", "txHash", txHash, "reason", txDetails.Log)
 	app.State.Size++
 	return &types.ExecTxResult{Code: CodeTypeOK, Log: "Executed", Events: events}
 }
