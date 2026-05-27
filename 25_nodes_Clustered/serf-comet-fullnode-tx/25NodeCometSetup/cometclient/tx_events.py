@@ -30,7 +30,7 @@ async def subscribe():
                 while True:
                     response = await websocket.recv()
                     data = json.loads(response)
-                    #logger.info("Raw event:\n%s", json.dumps(data, indent=2))
+                    logger.info("Raw event:\n%s", json.dumps(data, indent=2))
                     result = data.get("result")
                     if not result:
                         continue

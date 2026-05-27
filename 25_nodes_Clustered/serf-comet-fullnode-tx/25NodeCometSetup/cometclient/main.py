@@ -6,7 +6,7 @@ import datetime
 import logging
 import transactions
 import pricing
-import trigger_liqo
+import push_to_redis
 import math
 
 # --- Configuration ---
@@ -166,7 +166,7 @@ def main_loop():
                 logger.info(f"Transaction has been committed. Tx ID: {tx_id} Date: {tx_committed_time}")
                 pr_tx = pricing.create_pricing_payload(buyer, seller, quantity, score_ram, lowest_price, tx_id, tx_committed_time)
                 pricing.send_p2p_event(pr_tx)
-                trigger_liqo.publish_redis(buyer, buyer_ip, seller, seller_ip, cpu, ram, storage, gpu, amount, quantity)
+                trigger_liqo.publish_to_liqo(buyer, buyer_ip, seller, seller_ip, cpu, ram, storage, gpu, amount, quantity)
             else:
                 logger.error("Transaction record not found.")
         else:
