@@ -135,7 +135,7 @@ def get_transaction():
 
         tx_hash = transactions.broadcast_transaction(tx_payload)
         if tx_hash:
-            trigger_liqo.publish_to_liqo(buyer_obj, seller_obj, amount, tx_start_ts, lease_duration)
+            push_to_redis.publish_to_liqo(buyer_obj, seller_obj, amount, tx_start_ts, lease_duration)
             return jsonify({"status": "success", "message": f"Resource Trade initiated: {tx_hash}"}), 200
         else:
             return jsonify({"status": "error", "message": "Error Occured in Transaction. Try Again"}), 400
@@ -208,7 +208,7 @@ def get_transaction_scr():
 
         tx_hash = transactions.broadcast_transaction(tx_payload)
         if tx_hash:
-            trigger_liqo.publish_to_liqo(buyer_obj, seller_obj, amount, tx_start_ts, lease_duration)
+            push_to_redis.publish_to_liqo(buyer_obj, seller_obj, amount, tx_start_ts, lease_duration)
             return jsonify({"status": "success", "message": f"Resource Trade initiated: {tx_hash}"}), 200
         else:
             return jsonify({"status": "error", "message": "Error Occured in Transaction. Try Again"}), 400

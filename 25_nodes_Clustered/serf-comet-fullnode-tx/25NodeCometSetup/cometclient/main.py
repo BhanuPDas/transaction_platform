@@ -5,7 +5,7 @@ import time
 import datetime
 import logging
 import transactions
-import pricing
+#import pricing
 import push_to_redis
 import math
 
@@ -164,9 +164,9 @@ def main_loop():
             tx_id, tx_committed_time = transactions.get_tx_block(block_height)
             if tx_id and tx_committed_time:
                 logger.info(f"Transaction has been committed. Tx ID: {tx_id} Date: {tx_committed_time}")
-                pr_tx = pricing.create_pricing_payload(buyer, seller, quantity, score_ram, lowest_price, tx_id, tx_committed_time)
-                pricing.send_p2p_event(pr_tx)
-                trigger_liqo.publish_to_liqo(buyer, buyer_ip, seller, seller_ip, cpu, ram, storage, gpu, amount, quantity)
+#                pr_tx = pricing.create_pricing_payload(buyer, seller, quantity, score_ram, lowest_price, tx_id, tx_committed_time)
+#                pricing.send_p2p_event(pr_tx)
+                push_to_redis.publish_to_liqo(buyer, buyer_ip, seller, seller_ip, cpu, ram, storage, gpu, amount, quantity)
             else:
                 logger.error("Transaction record not found.")
         else:
