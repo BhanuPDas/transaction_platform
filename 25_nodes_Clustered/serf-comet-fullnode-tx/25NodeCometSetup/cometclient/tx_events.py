@@ -3,7 +3,7 @@ import json
 import logging
 import websockets
 import sellers_discovery
-import push_to_redis
+#import push_to_redis
 
 MAX_SEEN = 500
 
@@ -58,46 +58,46 @@ def handle_failed_tx(decoded_attrs: dict, seen_tx_hashes: set) -> bool:
     return True
 
 
-def handle_ongoing_tx(decoded_attrs: dict, seen_tx_hashes: set) -> bool:
-    """
-    Process an ongoingTx event. Returns True if successfully handled,
-    False if duplicate or invalid.
-    """
-    status = decoded_attrs.get("status")
-    if status != "OnGoing":
-        return False
-
-    tx_json = decoded_attrs.get("tx")
-    if not tx_json:
-        logger.warning("Missing tx payload in ongoingTx event")
-        return False
-
-    try:
-        tx_details = json.loads(tx_json)
-    except Exception as e:
-        logger.error(f"Failed to parse ongoingTx JSON: {e}")
-        return False
-
-    tx_hash = tx_details.get("tx_hash")
-    if tx_hash:
-        if tx_hash in seen_tx_hashes:
-            logger.info(f"Duplicate ongoingTx ignored: {tx_hash}")
-            return False
-        seen_tx_hashes.add(tx_hash)
-        if len(seen_tx_hashes) > MAX_SEEN:
-            seen_tx_hashes.clear()
-
-    logger.info("⏳ Ongoing Tx Detected:")
-    logger.info(json.dumps(tx_details, indent=2))
-    logger.info("Sending the ongoing tx to Emulate.")
-    push_to_redis.publish_to_emulate(tx_details)
-    return True
+# def handle_ongoing_tx(decoded_attrs: dict, seen_tx_hashes: set) -> bool:
+#     """
+#     Process an ongoingTx event. Returns True if successfully handled,
+#     False if duplicate or invalid.
+#     """
+#     status = decoded_attrs.get("status")
+#     if status != "OnGoing":
+#         return False
+#
+#     tx_json = decoded_attrs.get("tx")
+#     if not tx_json:
+#         logger.warning("Missing tx payload in ongoingTx event")
+#         return False
+#
+#     try:
+#         tx_details = json.loads(tx_json)
+#     except Exception as e:
+#         logger.error(f"Failed to parse ongoingTx JSON: {e}")
+#         return False
+#
+#     tx_hash = tx_details.get("tx_hash")
+#     if tx_hash:
+#         if tx_hash in seen_tx_hashes:
+#             logger.info(f"Duplicate ongoingTx ignored: {tx_hash}")
+#             return False
+#         seen_tx_hashes.add(tx_hash)
+#         if len(seen_tx_hashes) > MAX_SEEN:
+#             seen_tx_hashes.clear()
+#
+#     logger.info("⏳ Ongoing Tx Detected:")
+#     logger.info(json.dumps(tx_details, indent=2))
+#     logger.info("Sending the ongoing tx to Emulate.")
+#     push_to_redis.publish_to_emulate(tx_details)
+#     return True
 
 
 # Map event type strings to their handler functions
 EVENT_HANDLERS = {
     "failedTx": handle_failed_tx,
-    "ongoingTx": handle_ongoing_tx,
+#    "ongoingTx": handle_ongoing_tx,
 }
 
 

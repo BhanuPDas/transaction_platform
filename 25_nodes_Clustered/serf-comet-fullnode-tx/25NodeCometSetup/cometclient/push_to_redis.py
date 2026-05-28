@@ -30,11 +30,11 @@ def publish_to_liqo(buyer_obj, seller_obj, amount, tx_start_ts, lease_duration):
         logger.error(f"Received error while publishing to redis: {e}")
 
 
-def publish_to_emulate(tx_details):
-    logger.info("Preparing records to publish to emulate..")
-    try:
-        msg = json.dumps(tx_details)
-        rd.publish(em_Channel, msg)
-        logger.info(f"Message has been published to Emulate Redis: {msg}")
-    except Exception as e:
-        logger.error(f"Received error while publishing to redis: {e}")
+# def publish_to_emulate(tx_details):
+#     logger.info("Preparing records to publish to emulate..")
+#     try:
+#         msg = json.dumps(tx_details)
+#         rd.publish(em_Channel, msg)
+#         logger.info(f"Message has been published to Emulate Redis: {msg}")
+#     except Exception as e:
+#         logger.error(f"Received error while publishing to redis: {e}")
