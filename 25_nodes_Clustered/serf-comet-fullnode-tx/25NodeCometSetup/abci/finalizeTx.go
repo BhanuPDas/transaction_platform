@@ -222,8 +222,8 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 			{Key: "status", Value: txDetails.Status, Index: true},
 			{Key: "tx", Value: string(txStr), Index: true},
 		},
-	})*/
-	app.Logger.Info("Emitting OnGoingTx event", "txHash", txHash, "reason", txDetails.Log)
+	})
+	app.Logger.Info("Emitting OnGoingTx event", "txHash", txHash, "reason", txDetails.Log)*/
 	app.State.Size++
 	return &types.ExecTxResult{Code: CodeTypeOK, Log: "Executed", Events: events}
 }
