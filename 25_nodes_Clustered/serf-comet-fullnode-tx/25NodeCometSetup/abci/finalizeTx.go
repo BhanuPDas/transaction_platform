@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cometbft/cometbft/abci/types"
+	"github.com/go-redis/redis/v8"
 )
 
 func (app *MyApp) FinalizeBlock(_ context.Context, req *types.FinalizeBlockRequest) (*types.FinalizeBlockResponse, error) {
@@ -209,13 +210,19 @@ func (app *MyApp) ExecuteTx(decodedStrTx []byte, req *types.FinalizeBlockRequest
 	if err != nil {
 		app.Logger.Error(fmt.Sprintf("Failed to marshal tx details for the OnGoing event: %v", err))
 	}
-	events = append(events, types.Event{
+	if txStr != nil {
+		if streamErr := app.publishToRedisStream(txStr); streamErr != nil {
+			app.Logger.Error(fmt.Sprintf("Failed to publish to Redis stream: %v", streamErr))
+		}
+	}
+	//Dont need ongoing event anymore
+	/*events = append(events, types.Event{
 		Type: "ongoingTx",
 		Attributes: []types.EventAttribute{
 			{Key: "status", Value: txDetails.Status, Index: true},
 			{Key: "tx", Value: string(txStr), Index: true},
 		},
-	})
+	})*/
 	app.Logger.Info("Emitting OnGoingTx event", "txHash", txHash, "reason", txDetails.Log)
 	app.State.Size++
 	return &types.ExecTxResult{Code: CodeTypeOK, Log: "Executed", Events: events}
@@ -273,4 +280,16 @@ func (app *MyApp) HasHighBudget(buyer BuyerInfo, seller SellerInfo) (bool, error
 	}
 
 	return true, nil
+}
+
+func (app *MyApp) publishToRedisStream(txJSON []byte) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	app.Logger.Info(fmt.Sprintf("Publishing to Redis Emulate stream: %s", txJSON))
+	return app.RedisClient.XAdd(ctx, &redis.XAddArgs{
+		Stream: "emulate",
+		MaxLen: 10000,
+		Approx: true,
+		Values: []interface{}{"ongoingtx", txJSON},
+	}).Err()
 }

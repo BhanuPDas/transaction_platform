@@ -5,6 +5,7 @@ import (
 	"github.com/cometbft/cometbft/abci/types"
 	"github.com/cometbft/cometbft/crypto"
 	"github.com/cometbft/cometbft/libs/log"
+	"github.com/go-redis/redis/v8"
 )
 
 type SellerInfo struct {
@@ -77,6 +78,7 @@ type MyApp struct {
 	Logger                     log.Logger
 	Cls                        []string
 	ValidatorsDirty            bool
+	RedisClient                *redis.Client
 }
 
 type TxDetails struct {
