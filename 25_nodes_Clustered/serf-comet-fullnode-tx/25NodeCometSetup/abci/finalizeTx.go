@@ -288,7 +288,7 @@ func (app *MyApp) publishToRedisStream(txJSON []byte) error {
 	app.Logger.Info(fmt.Sprintf("Publishing to Redis Emulate stream: %s", txJSON))
 	return app.RedisClient.XAdd(ctx, &redis.XAddArgs{
 		Stream: "emulate",
-		MaxLen: 10000,
+		MaxLen: 5000,
 		Approx: true,
 		Values: []interface{}{"ongoingtx", txJSON},
 	}).Err()
