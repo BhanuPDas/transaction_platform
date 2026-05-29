@@ -10,9 +10,13 @@ import (
 	cryptoenc "github.com/cometbft/cometbft/crypto/encoding"
 	"github.com/cometbft/cometbft/libs/log"
 	"github.com/cometbft/cometbft/version"
+	"github.com/go-redis/redis/v8"
 )
 
 func NewMyApp(db *pebble.DB, logger log.Logger, cluster *AppConfig) *MyApp {
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+	})
 	app := &MyApp{
 		State: &State{
 			DB:        db,
@@ -23,6 +27,8 @@ func NewMyApp(db *pebble.DB, logger log.Logger, cluster *AppConfig) *MyApp {
 		Logger:                     logger,
 		UpdatedValidatorsThisBlock: make(map[string]struct{}),
 		Cls:                        cluster.ClusterName,
+		ValidatorsDirty:            false,
+		RedisClient:                redisClient,
 	}
 	app.Logger.Info(fmt.Sprintf("Loading Data from DB..."))
 	app.LoadFromDB()
@@ -66,6 +72,9 @@ func (app *MyApp) InitChain(_ context.Context, req *types.InitChainRequest) (*ty
 			app.State.Validator = append(app.State.Validator, v)
 			app.ValAddrToPubKeyMap[addr] = pubkey
 			app.ValUpdates = append(app.ValUpdates, v)
+		}
+		if len(req.Validators) > 0 {
+			app.ValidatorsDirty = true
 		}
 	}
 	app.Logger.Info(fmt.Sprintf("Total validators initialized: %d", len(app.State.Validator)))

@@ -6,4 +6,5 @@ require (
 	github.com/cockroachdb/pebble/v2 v2.1.1
 	github.com/cometbft/cometbft v1.0.1
 	github.com/hashicorp/serf v0.8.2
+	github.com/go-redis/redis/v8 v8.11.5
 )

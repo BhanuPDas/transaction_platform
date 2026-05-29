@@ -62,6 +62,7 @@ func (app *MyApp) UpdateValidator(vReqTx string) {
 		}
 	}
 	app.SortStateValidatorByAddress()
+	app.ValidatorsDirty = true
 }
 
 func (app *MyApp) AddOrUpdateStateValidator(v types.ValidatorUpdate, addr string) {
@@ -159,6 +160,7 @@ func (app *MyApp) punishValidators(req *types.FinalizeBlockRequest) {
 					PubKeyBytes: pubKey.Bytes(),
 				}, addr)
 			}
+			app.ValidatorsDirty = true
 			app.Logger.Info("Decreased validator power by 2 because of the equivocation", "val", addr)
 		}
 	}
