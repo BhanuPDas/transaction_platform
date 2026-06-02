@@ -15,7 +15,12 @@ const STATE_DB_PATH = "/root/abci/state.db"
 
 func main() {
 	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout)).With("module", "main")
-	logger.Info("--- Starting ABCI with Persistence enabled ---")
+	clusterName := os.Getenv("CLUSTER_NAME")
+	if clusterName == "" {
+		logger.Error("CLUSTER_NAME environment variable not set")
+		os.Exit(1)
+	}
+	logger.Info("Starting ABCI", "cluster", clusterName)
 	db, err := pebble.Open(STATE_DB_PATH, &pebble.Options{})
 	if err != nil {
 		logger.Error("failed to open State DB", "err", err)
@@ -28,12 +33,13 @@ func main() {
 		}
 	}(db)
 
-	cls, err := LoadConfig("config.yaml")
+	cluster, err := LoadConfig("config.yaml", clusterName)
 	if err != nil {
 		logger.Error("failed to load config file", "err", err)
 		panic(err)
 	}
-	app := NewMyApp(db, logger, cls)
+	logger.Info("Config loaded", "cluster", cluster.Name, "nodes", len(cluster.Nodes))
+	app := NewMyApp(db, logger, cluster)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	rpcAddr := "0.0.0.0:7373"

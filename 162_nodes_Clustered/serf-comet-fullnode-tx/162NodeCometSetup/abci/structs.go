@@ -76,7 +76,7 @@ type MyApp struct {
 	ValAddrToPubKeyMap         map[string]crypto.PubKey
 	UpdatedValidatorsThisBlock map[string]struct{}
 	Logger                     log.Logger
-	Cls                        []string
+	Cluster                    *ResolvedCluster
 	ValidatorsDirty            bool
 	RedisClient                *redis.Client
 }

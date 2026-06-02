@@ -13,7 +13,7 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-func NewMyApp(db *pebble.DB, logger log.Logger, cluster *AppConfig) *MyApp {
+func NewMyApp(db *pebble.DB, logger log.Logger, cluster *ResolvedCluster) *MyApp {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 	})
@@ -26,7 +26,7 @@ func NewMyApp(db *pebble.DB, logger log.Logger, cluster *AppConfig) *MyApp {
 		ValAddrToPubKeyMap:         make(map[string]crypto.PubKey),
 		Logger:                     logger,
 		UpdatedValidatorsThisBlock: make(map[string]struct{}),
-		Cls:                        cluster.ClusterName,
+		Cluster:                    cluster,
 		ValidatorsDirty:            false,
 		RedisClient:                redisClient,
 	}
@@ -48,24 +48,20 @@ func (app *MyApp) Info(_ context.Context, req *types.InfoRequest) (*types.InfoRe
 func (app *MyApp) InitChain(_ context.Context, req *types.InitChainRequest) (*types.InitChainResponse, error) {
 	app.Logger.Info(fmt.Sprintf("COMETBFT Initialization Start - INIT CHAIN"))
 	if len(app.State.Ledger) == 0 {
-		app.Logger.Info(fmt.Sprintf("No existing balances found, initializing defaults for all nodes..."))
-		if len(app.Cls) > 0 && app.Cls[0] == "clusterA" {
-			for i := 1; i <= 12; i++ {
-				key := fmt.Sprintf("serf%d", i)
-				app.State.Ledger[key] = 100000
-			}
-		} else if len(app.Cls) > 0 && app.Cls[0] == "clusterB" {
-			for i := 13; i <= 25; i++ {
-				key := fmt.Sprintf("serf%d", i)
-				app.State.Ledger[key] = 100000
-			}
+		app.Logger.Info("No existing balances found, initializing from config...",
+			"cluster", app.Cluster.Name,
+			"nodes", len(app.Cluster.Nodes),
+			"initial_balance", app.Cluster.InitialBalance,
+		)
+		for _, node := range app.Cluster.Nodes {
+			app.State.Ledger[node] = app.Cluster.InitialBalance
 		}
 	} else {
-		app.Logger.Info(fmt.Sprintf("Successfully restored balances from Pebble DB."))
+		app.Logger.Info("Successfully restored balances from PebbleDB.")
 	}
-	app.Logger.Info(fmt.Sprintf("Ledger initialized with %d accounts.", len(app.State.Ledger)))
+	app.Logger.Info("Ledger ready", "accounts", len(app.State.Ledger))
 	if len(app.State.Validator) == 0 {
-		app.Logger.Error(fmt.Sprintf("No validators found in DB...Add validators for consensus"))
+		app.Logger.Info(fmt.Sprintf("No validators found in DB...Add validators for consensus"))
 		for _, v := range req.Validators {
 			pubkey, _ := cryptoenc.PubKeyFromTypeAndBytes(v.PubKeyType, v.PubKeyBytes)
 			addr := string(pubkey.Address())

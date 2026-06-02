@@ -1,0 +1,26 @@
+initial_balance: 100000
+
+clusters:
+  - name: "cluster1"
+    nodes: [serf1,serf2,serf3,serf4,serf5,serf6,serf7,serf8,serf9,serf10,serf11,serf12,serf13,serf14,serf15,serf16,serf17]
+
+  - name: "cluster2"
+    nodes: [serf18,serf19,serf20,serf21,serf22,serf23,serf24,serf25,serf26,serf27,serf28,serf29,serf30,serf31,serf32]
+
+  - name: "cluster3"
+    nodes: [serf33,serf34,serf35,serf36,serf37,serf38,serf39,serf40,serf41,serf42]
+
+  - name: "cluster4"
+    nodes: [serf43,serf44,serf45,serf46,serf47,serf48,serf49,serf50,serf57,serf58,serf59,serf60,serf61,serf62,serf63,serf64,serf65,serf82]
+
+  - name: "cluster5"
+    nodes: [serf66,serf67,serf68,serf69,serf70,serf71,serf72,serf73,serf74,serf75,serf76,serf77,serf78,serf79,serf80,serf81,serf83,serf84,serf85,serf86,serf87,serf88,serf89,serf90,serf91,serf92,serf93,serf94,serf95]
+
+  - name: "cluster6"
+    nodes: [serf96,serf97,serf98,serf99,serf100,serf101,serf102,serf103,serf104,serf105,serf106,serf107,serf108,serf109,serf110,serf111,serf112,serf113,serf114,serf115,serf116,serf117,serf118,serf119,serf120,serf121,serf122,serf123,serf124,serf125,serf126,serf128,serf129]
+
+  - name: "cluster7"
+    nodes: [serf127,serf130,serf131,serf132,serf133,serf134,serf135,serf136,serf137,serf138,serf139,serf140,serf141,serf142,serf143,serf144,serf145,serf146,serf147,serf148,serf149,serf150,serf151,serf152,serf153,serf154,serf155,serf156,serf157,serf158,serf159,serf160,serf161,serf162]
+
+  - name: "cluster8"
+    nodes: [serf51,serf52,serf53,serf54,serf55,serf56]
