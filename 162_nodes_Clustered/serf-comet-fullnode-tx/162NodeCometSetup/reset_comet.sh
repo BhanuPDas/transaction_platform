@@ -85,8 +85,8 @@ reset_cometbft() {
     docker exec -d "$container" bash -c "cd /root/abci/clusterConfig && CLUSTER_NAME=$cluster nohup /root/abci-app > /root/logs/abci.log 2>&1"
 #    docker cp "./${cluster}Config/genesis.json" "$container":/root/.cometbft/config/
 
-    nodeId=$(docker exec "$container" /root/go/bin/cometbft show-node-id)
-    docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"rpc_addr\":\"$nodeId@$ip_address:26656\"}}" http://127.0.0.1:5555/updatetags
+#    nodeId=$(docker exec "$container" /root/go/bin/cometbft show-node-id)
+#    docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"rpc_addr\":\"$nodeId@$ip_address:26656\"}}" http://127.0.0.1:5555/updatetags
     docker exec -d "$container" bash -c "nohup /root/go/bin/cometbft node > /root/logs/cometbft.log 2>&1"
     sleep 2
 
@@ -96,7 +96,7 @@ reset_cometbft() {
     if [[ -n "${SELLER_NODES[$k]}" ]]; then
     echo "$container is a seller node — skipping"
     else
-      docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"role\":\"buyer\"}}" http://127.0.0.1:5555/updatetags
+#      docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"role\":\"buyer\"}}" http://127.0.0.1:5555/updatetags
       docker exec -d "$container" bash -c "cd /root/cometclient && nohup python3 tx_api.py > /root/logs/tx_api.log 2>&1 &"
     fi
     echo "✔ Done with $container"
