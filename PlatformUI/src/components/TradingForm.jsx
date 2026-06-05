@@ -1,6 +1,17 @@
 import { useState, useEffect } from 'react';
 
-const CLUSTERS = ['Cluster A', 'Cluster B'];
+// 8 clusters mapped to their entry-node serf numbers
+// The fetch URL uses /api/cluster{N} which the proxy routes to the correct backend
+const CLUSTERS = [
+  { label: 'Cluster 1', key: 'cluster1' },
+  { label: 'Cluster 2', key: 'cluster2' },
+  { label: 'Cluster 3', key: 'cluster3' },
+  { label: 'Cluster 4', key: 'cluster4' },
+  { label: 'Cluster 5', key: 'cluster5' },
+  { label: 'Cluster 6', key: 'cluster6' },
+  { label: 'Cluster 7', key: 'cluster7' },
+  { label: 'Cluster 8', key: 'cluster8' },
+];
 
 // Canonical resource keys that map directly to the POST body JSON
 const ALL_RESOURCE_TYPES = ['vcpu', 'ram', 'storage', 'vgpu'];
@@ -40,28 +51,24 @@ export default function TradingForm({ onCheckBalance, onShowTransactions }) {
         return;
       }
 
-      let url = '';
-      if (formData.cluster === 'Cluster A') url = '/api/clusterA/members';
-      else if (formData.cluster === 'Cluster B') url = '/api/clusterB/members';
+      const url = `/api/${formData.cluster}/members`;
 
-      if (url) {
-        try {
-          const response = await fetch(url);
-          if (response.ok) {
-            const membersData = await response.json();
-            const filtered = membersData.filter(m => m.Tags && m.Tags.role === 'buyer');
-            const mapping = {};
-            filtered.forEach(m => (mapping[m.Name] = m.Addr));
-            setBuyerMap(mapping);
-            setBuyersList(filtered.map(m => m.Name).sort((a, b) => a.localeCompare(b)));
-          } else {
-            setBuyersList([]);
-            setBuyerMap({});
-          }
-        } catch {
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          const membersData = await response.json();
+          const filtered = membersData.filter(m => m.Tags && m.Tags.role === 'buyer');
+          const mapping = {};
+          filtered.forEach(m => (mapping[m.Name] = m.Addr));
+          setBuyerMap(mapping);
+          setBuyersList(filtered.map(m => m.Name).sort((a, b) => a.localeCompare(b)));
+        } else {
           setBuyersList([]);
           setBuyerMap({});
         }
+      } catch {
+        setBuyersList([]);
+        setBuyerMap({});
       }
     };
 
@@ -200,7 +207,7 @@ export default function TradingForm({ onCheckBalance, onShowTransactions }) {
       alert('Please select a buyer node first to check their specific ledger balance.');
       return;
     }
-    if (onCheckBalance) onCheckBalance(`clab-century-${formData.buyer}`);
+    if (onCheckBalance) onCheckBalance(`clab-nebula-extended-${formData.buyer}`);
   };
 
   const handleShowTransactions = () => {
@@ -225,7 +232,9 @@ export default function TradingForm({ onCheckBalance, onShowTransactions }) {
           <label>Cluster Node</label>
           <select name="cluster" value={formData.cluster} onChange={handleFormChange}>
             <option value="">-- Select Cluster --</option>
-            {CLUSTERS.map(c => <option key={c} value={c}>{c}</option>)}
+            {CLUSTERS.map(c => (
+              <option key={c.key} value={c.key}>{c.label}</option>
+            ))}
           </select>
           {errors.cluster && <span className="error-message">{errors.cluster}</span>}
         </div>

@@ -14,19 +14,30 @@ const app = express();
 app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
-// Proxy API requests to Cluster A Backends
-app.use('/api/clusterA', createProxyMiddleware({
-  target: 'http://clab-century-serf1:5555',
-  changeOrigin: true,
-  pathRewrite: { '^/api/clusterA': '' }
-}));
+// Cluster topology: maps cluster number to the first serf node in that cluster
+// Used to determine which backend node to proxy API requests to
+const CLUSTER_ENTRY_NODES = {
+  1: 'clab-nebula-extended-serf1',
+  2: 'clab-nebula-extended-serf18',
+  3: 'clab-nebula-extended-serf33',
+  4: 'clab-nebula-extended-serf43',
+  5: 'clab-nebula-extended-serf66',
+  6: 'clab-nebula-extended-serf96',
+  7: 'clab-nebula-extended-serf127',
+  8: 'clab-nebula-extended-serf51',
+};
 
-// Proxy API requests to Cluster B Backends
-app.use('/api/clusterB', createProxyMiddleware({
-  target: 'http://clab-century-serf13:5555',
-  changeOrigin: true,
-  pathRewrite: { '^/api/clusterB': '' }
-}));
+// Proxy API requests to each cluster's entry node backend
+for (const [num, host] of Object.entries(CLUSTER_ENTRY_NODES)) {
+  app.use(
+    `/api/cluster${num}`,
+    createProxyMiddleware({
+      target: `http://${host}:5555`,
+      changeOrigin: true,
+      pathRewrite: { [`^/api/cluster${num}`]: '' },
+    })
+  );
+}
 
 // Proxy Smart Contract initiate_tx POST to the buyer's container
 app.use('/api/initiate_tx', createProxyMiddleware({
@@ -34,7 +45,7 @@ app.use('/api/initiate_tx', createProxyMiddleware({
   router: (req) => {
     const buyer = req.query.targetBuyer;
     if (!buyer) return 'http://localhost:5000';
-    return `http://clab-century-${buyer.split(':')[0]}:5665`;
+    return `http://clab-nebula-extended-${buyer.split(':')[0]}:5665`;
   },
   changeOrigin: true,
   pathRewrite: () => '/initiate_tx',
@@ -66,7 +77,6 @@ app.use('/api/ledger', createProxyMiddleware({
   pathRewrite: (path, req) => {
     const dataParam = req.query.data || '';
     const newPath = `/abci_query?data=${dataParam}`;
-
     console.log(`[Ledger Proxy] Forwarding to: ${newPath}`);
     return newPath;
   }
@@ -78,7 +88,7 @@ app.use('/api/tx_records', createProxyMiddleware({
   router: (req) => {
     const buyer = req.query.targetBuyer;
     if (!buyer) return 'http://localhost:26657';
-    return `http://clab-century-${buyer.split(':')[0]}:26657`;
+    return `http://clab-nebula-extended-${buyer.split(':')[0]}:26657`;
   },
   changeOrigin: true,
   pathRewrite: (path, req) => {
