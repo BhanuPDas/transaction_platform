@@ -28,6 +28,15 @@ func (app *MyApp) Query(_ context.Context, query *types.QueryRequest) (*types.Qu
 		resp.Log = fmt.Sprintf("Total transactions found: %d", len(txs))
 		resp.Value = resultBytes
 		return &resp, nil
+	case "history":
+		txs := app.FetchTxsHistory()
+		resultBytes, err := json.Marshal(txs)
+		if err != nil {
+			return nil, err
+		}
+		resp.Log = fmt.Sprintf("Total transactions found: %d", len(txs))
+		resp.Value = resultBytes
+		return &resp, nil
 	default:
 		resp.Log = "unknown query"
 		resp.Value = []byte{}

@@ -389,3 +389,44 @@ func (app *MyApp) FetchTxs() []TxDetails {
 	app.Logger.Info(fmt.Sprintf("FetchTxs: returned %d transactions (cutoff unix=%d)", len(transactions), cutoff))
 	return transactions
 }
+
+func (app *MyApp) FetchTxsHistory() []TxDetails {
+	var transactions []TxDetails
+
+	iter, err := app.State.DB.NewIter(&pebble.IterOptions{
+		LowerBound: []byte("tx:"),
+		UpperBound: []byte("tx~"),
+	})
+	if err != nil {
+		app.Logger.Error(fmt.Sprintf("FetchTxs: failed to open iterator: %v", err))
+		return transactions
+	}
+	defer func() {
+		if err := iter.Close(); err != nil {
+			app.Logger.Error(fmt.Sprintf("FetchTxs: failed to close iterator: %v", err))
+		}
+	}()
+
+	for iter.First(); iter.Valid(); iter.Next() {
+		val, err := iter.ValueAndErr()
+		if err != nil {
+			app.Logger.Error(fmt.Sprintf("FetchTxs: failed to read value: %v", err))
+			continue
+		}
+		valBytes := append([]byte{}, val...)
+
+		var tx TxDetails
+		if err := json.Unmarshal(valBytes, &tx); err != nil {
+			app.Logger.Error(fmt.Sprintf("FetchTxs: failed to unmarshal tx: %v", err))
+			continue
+		}
+		transactions = append(transactions, tx)
+	}
+
+	if err := iter.Error(); err != nil {
+		app.Logger.Error(fmt.Sprintf("FetchTxs: iterator error: %v", err))
+	}
+
+	app.Logger.Info(fmt.Sprintf("FetchTxs: returned %d transactions: ", len(transactions)))
+	return transactions
+}
