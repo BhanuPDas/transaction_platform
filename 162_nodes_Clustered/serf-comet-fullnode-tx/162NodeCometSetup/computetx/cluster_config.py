@@ -21,7 +21,7 @@ on, so they're spread round-robin across the topic's partitions instead.
 
 from __future__ import annotations
 
-TOPIC_PREFIX = "oden-tx-cluster"
+TOPIC_PREFIX = "oden.cluster"
 
 # cluster_id -> every serf node name in that cluster (buyers + sellers)
 CLUSTER_NODES = {
@@ -69,7 +69,7 @@ def get_cluster_id(node_name: str) -> int:
 
 
 def get_topic(cluster_id: int) -> str:
-    return f"{TOPIC_PREFIX}-{cluster_id}"
+    return f"{TOPIC_PREFIX}.{cluster_id}"
 
 
 def get_partition_count(cluster_id: int) -> int:
