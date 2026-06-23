@@ -51,7 +51,7 @@ def setup_logging(buyer_node_name: str) -> logging.LoggerAdapter:
     stream_handler.setFormatter(JsonFormatter())
     root.addHandler(stream_handler)
 
-    loki_url = os.environ.get("LOKI_URL")
+    loki_url = os.environ.get("LOKI_URL", "http://localhost:3100/loki/api/v1/push")
     if loki_url:
         try:
             import logging_loki  # pip install python-logging-loki

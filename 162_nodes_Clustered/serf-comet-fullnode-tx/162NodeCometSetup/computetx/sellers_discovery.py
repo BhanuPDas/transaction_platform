@@ -1,7 +1,4 @@
-import logging
 import math
-
-logger = logging.getLogger(__name__)
 
 RESOURCE_MAP = {
     "vcpu": {"price": "price_per_cpu", "score": "score_per_cpu", "available": "cpu"},
@@ -41,6 +38,7 @@ def _compute_utility(
         buyer_score_expectation: float,
         provider_carbon: float,
         buyer_carbon_tolerance: float,
+        logger
 ) -> float:
     """
     Computes buyer utility for a single provider (Equation 1 from the paper):
@@ -94,7 +92,7 @@ def _compute_utility(
     )
     return utility
 
-def select_seller(resources: dict, discovery_results: list) -> dict | None:
+def select_seller(resources: dict, discovery_results: list, logger) -> dict | None:
     """
     Selects the best seller using the buyer utility model (Eq. 1 & 2):
 
@@ -175,6 +173,7 @@ def select_seller(resources: dict, discovery_results: list) -> dict | None:
             buyer_score_expectation=buyer_score_expectation,
             provider_carbon=provider_carbon,
             buyer_carbon_tolerance=buyer_carbon_tolerance,
+            logger=logger
         )
 
         logger.info(f"[select_seller] Provider '{name}' → utility U={utility:.6f}")

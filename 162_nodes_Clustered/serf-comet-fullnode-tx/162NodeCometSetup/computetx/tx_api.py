@@ -113,7 +113,7 @@ def get_transaction_scr():
         seller_rec = None
         if discovered:
             api_data = discovered.get("results")
-            seller_rec = sellers_discovery.select_seller(resources, api_data)
+            seller_rec = sellers_discovery.select_seller(resources, api_data, logger)
 
         # --- Failure case (a): no seller could be selected ---
         if not seller_rec:
