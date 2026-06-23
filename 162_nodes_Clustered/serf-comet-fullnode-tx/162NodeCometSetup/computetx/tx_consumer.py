@@ -154,7 +154,7 @@ class TxConsumer:
             self.logger.error(
                 "Skipping unparsable message at offset=%s: %s", msg.offset(), exc
             )
-            self._consumer.commit(msg)
+            self._consumer.commit(message=msg,asynchronous=True)
             return
 
         status = event.get("status")
@@ -174,9 +174,10 @@ class TxConsumer:
                         "Unknown status %r at offset=%s, persisting nothing",
                         status, msg.offset(),
                     )
-                self._consumer.commit(msg)
+                self._consumer.commit(message=msg, asynchronous=True)
                 return
-            except Exception:
+            except Exception as exc:
+                self.logger.error(f"Error while processing events{exc}")
                 self.logger.exception(
                     "Failed processing message at offset=%s, retrying in %ss",
                     msg.offset(), _RETRY_SLEEP_SECONDS,

@@ -20,6 +20,7 @@ import logging
 import os
 import sys
 from datetime import datetime, timezone
+import logging_loki  # pip install python-logging-loki
 
 
 class JsonFormatter(logging.Formatter):
@@ -54,8 +55,6 @@ def setup_logging(node_name: str, job_type: str) -> logging.LoggerAdapter:
     loki_url = os.environ.get("LOKI_URL", "http://loki:3100/loki/api/v1/push")
     if loki_url:
         try:
-            import logging_loki  # pip install python-logging-loki
-
             loki_handler = logging_loki.LokiHandler(
                 url=loki_url,
                 tags={"job": job_type, "buyer": node_name},

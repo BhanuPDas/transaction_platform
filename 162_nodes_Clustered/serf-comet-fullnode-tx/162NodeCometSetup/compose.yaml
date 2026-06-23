@@ -103,6 +103,30 @@ services:
     networks:
       - clab
 
+  app:
+    build: ./dbupdate/.
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_POOL_MIN_CONN: "1"
+      DB_POOL_MAX_CONN: "5"
+      POLL_INTERVAL_SECONDS: "900"
+      JOB_BATCH_SIZE: "700"
+      LOG_LEVEL: "INFO"
+      SERVICE_NAME: "oden-tx-history-scheduler"
+      LOKI_URL: "http://loki:3100/loki/api/v1/push"
+    ports:
+      - "5000:5000"
+    networks:
+      - clab
+
 volumes:
   kafka-data:
   kafka-ui-data:
