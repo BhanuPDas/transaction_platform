@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-BROKER="kafka:9092"   # ← replace with your broker machine IP
+BROKER="localhost:9092"   # inside the container, the broker is local
 
 # Partition count = seller count per cluster, verified against S (48 sellers)
 # and clusters.xlsx (162 nodes / 8 clusters):
@@ -29,7 +29,7 @@ for CLUSTER_ID in 1 2 3 4 5 6 7 8; do
   PARTS="${PARTITIONS[$CLUSTER_ID]}"
 
   echo "Creating $TOPIC ($PARTS partitions)..."
-  docker exec kafka-broker kafka-topics \
+  /opt/kafka/bin/kafka-topics.sh \
     --bootstrap-server "$BROKER" \
     --create \
     --if-not-exists \
@@ -46,15 +46,10 @@ done
 
 echo ""
 echo "=== All topics ==="
-docker exec kafka-broker kafka-topics \
-  --bootstrap-server "$BROKER" \
-  --list
+/opt/kafka/bin/kafka-topics.sh --bootstrap-server "$BROKER" --list
 
 echo ""
 echo "=== Topic details ==="
 for TOPIC in "${TOPICS[@]}"; do
-  docker exec kafka-broker kafka-topics \
-    --bootstrap-server "$BROKER" \
-    --describe \
-    --topic "$TOPIC"
+  /opt/kafka/bin/kafka-topics.sh --bootstrap-server "$BROKER" --describe --topic "$TOPIC"
 done
