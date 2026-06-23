@@ -1,5 +1,5 @@
 """
-Status semantics (mirrors the old Go TxDetails):
+Status semantics:
   - "OnGoing": a seller was selected AND the buyer's budget covers the
     seller's prices for every demanded resource. Produced to the cluster's
     Kafka topic keyed by f"{tx_uuid}-{seller_name}", and pushed to Redis.
