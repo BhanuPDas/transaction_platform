@@ -41,7 +41,6 @@ setup_kafka() {
     echo "$pVersion installation complete."
     echo "Copying tx client..."
     docker cp "./computetx/." "$container":/root/computetx/ || { echo "Failed to copy py files to $container"; exit 1; }
-
     echo "Transaction Setup in $container is complete."
     
   done

@@ -14,7 +14,7 @@ for i in {1..162}; do
   containers+=(clab-nebula-extended-serf"$i")
 done
 
-reset_cometbft() {
+reset_kafka() {
   for i in "${!containers[@]}"; do
     container="${containers[$i]}"
     k=$((i + 1))
@@ -25,82 +25,36 @@ reset_cometbft() {
     fi
     echo "IP address for $container (eth1): $ip_address"
     echo "=============================================="
-    echo "Resetting ABCI + CometBFT on $container..."
+    echo "Resetting Kafka on $container..."
     echo "=============================================="
-
-    echo "[1] Killing CometBFT..."
-    comet_pid=$(docker exec "$container" pgrep -f "/root/go/bin/cometbft node")
-    if [[ -n "$comet_pid" ]]; then
-      docker exec "$container" kill -9 $comet_pid
-      sleep 1
-    else
-      echo "CometBFT not running"
-    fi
-
-    echo "[2] Killing ABCI..."
-    abci_pid=$(docker exec "$container" pgrep -f "/root/abci-app")
-    if [[ -n "$abci_pid" ]]; then
-      docker exec "$container" kill -9 $abci_pid
-      sleep 1
-    else
-      echo "ABCI not running"
-    fi
-    echo "[3] Killing Tx API..."
-    tx_pid=$(docker exec "$container" pgrep -f "python3 tx_api.py")
+    echo "[1] Killing Kafka Tx Producer..."
+    tx_pid=$(docker exec "$container" pgrep -f "python3 tx_producer.py")
     if [[ -n "$tx_pid" ]]; then
-      docker exec "$container" kill -9 $tx_pid
+      docker exec "$container" kill -9 "$tx_pid"
       sleep 1
     else
-      echo "Python Tx API not running"
+      echo "Python Tx Producer not running"
     fi
 
-    echo "[4] Removing state.db..."
-    docker exec "$container" rm -rf /root/abci/state.db
-    sleep 1
-
-    echo "[5] Resetting CometBFT state..."
-    docker exec "$container" /root/go/bin/cometbft unsafe-reset-all
-    sleep 1
-
-    echo "[6] Restarting ABCI & CometBFT..."
-    docker exec "$container" bash -c "cd /root && rm -rf abci && mkdir -p abci && rm -rf cometclient && mkdir -p cometclient"
-    docker cp "./abci/." "$container":/root/abci/ || { echo "Failed to copy abci files to $container"; exit 1; }
-    docker cp "./cometclient/." "$container":/root/cometclient/ || { echo "Failed to copy main.py file to $container"; exit 1; }
-    docker exec "$container" bash -c "cd /root/abci && /usr/local/go/bin/go clean -modcache && /usr/local/go/bin/go mod tidy && /usr/local/go/bin/go build -o /root/abci-app *.go"
-
-    if   (( k >= 1  && k <= 17 )); then cluster="cluster1"
-        elif (( k >= 18 && k <= 32 )); then cluster="cluster2"
-        elif (( k >= 33 && k <= 42 )); then cluster="cluster3"
-        elif (( (k >= 43 && k <= 50) || (k >= 57 && k <= 65) || k == 82 )); then cluster="cluster4"
-        elif (( (k >= 66 && k <= 81) || (k >= 83 && k <= 95) )); then cluster="cluster5"
-        elif (( (k >= 96 && k <= 126) || (k >= 128 && k <= 129) )); then cluster="cluster6"
-        elif (( k == 127 || (k >= 130 && k <= 162) )); then cluster="cluster7"
-        elif (( k >= 51 && k <= 56 )); then cluster="cluster8"
-        else
-            echo "ERROR: $container has no cluster mapping — skipping"
-            continue
-        fi
-
-    docker exec "$container" rm -f /root/.cometbft/config/genesis.json
-    docker exec -d "$container" bash -c "cd /root/abci/clusterConfig && CLUSTER_NAME=$cluster nohup /root/abci-app > /root/logs/abci.log 2>&1"
-    docker cp "./${cluster}Config/genesis.json" "$container":/root/.cometbft/config/
-
-    nodeId=$(docker exec "$container" /root/go/bin/cometbft show-node-id)
-    docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"rpc_addr\":\"$nodeId@$ip_address:26656\"}}" http://127.0.0.1:5555/updatetags
-    docker exec -d "$container" bash -c "nohup /root/go/bin/cometbft node > /root/logs/cometbft.log 2>&1"
-    sleep 2
-
-    echo "[7] Verifying logs..."
-    docker exec "$container" tail -n 20 /root/logs/abci.log
-    docker exec "$container" tail -n 20 /root/logs/cometbft.log
-    if [[ -n "${SELLER_NODES[$k]}" ]]; then
-    echo "$container is a seller node — skipping"
+    echo "[2] Killing Kafka Tx Consumer..."
+    tx_pid=$(docker exec "$container" pgrep -f "python3 tx_consumer.py")
+    if [[ -n "$tx_pid" ]]; then
+      docker exec "$container" kill -9 "$tx_pid"
+      sleep 1
     else
-      docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"role\":\"buyer\"}}" http://127.0.0.1:5555/updatetags
-      docker exec -d "$container" bash -c "cd /root/cometclient && nohup python3 tx_api.py > /root/logs/tx_api.log 2>&1 &"
+      echo "Python Tx Consumer not running"
+    fi
+
+    echo "[3] Restarting Producers And Consumers..."
+    docker exec "$container" bash -c "DEBIAN_FRONTEND=noninteractive apt update && apt upgrade -y && pip3 install --no-cache-dir confluent-kafka python-logging-loki psycopg2-binary"
+    docker cp "./computetx/." "$container":/root/computetx/ || { echo "Failed to copy py files to $container"; exit 1; }
+    if [[ -n "${SELLER_NODES[$k]}" ]]; then
+    docker exec -d "$container" bash -c "cd /root/computetx && nohup python3 tx_consumer.py > /dev/null 2>&1 &"
+    else
+      docker exec -d "$container" bash -c "cd /root/computetx && nohup python3 tx_producer.py > /dev/null 2>&1 &"
     fi
     echo "✔ Done with $container"
   done
 }
 
-reset_cometbft
+reset_kafka
