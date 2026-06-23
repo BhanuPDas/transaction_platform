@@ -37,7 +37,7 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload)
 
 
-def setup_logging(buyer_node_name: str) -> logging.LoggerAdapter:
+def setup_logging(node_name: str, job_type: str) -> logging.LoggerAdapter:
     """
     Configure root logging once and return a LoggerAdapter that
     automatically injects `buyer=<node_name>` into every record, so call
@@ -58,7 +58,7 @@ def setup_logging(buyer_node_name: str) -> logging.LoggerAdapter:
 
             loki_handler = logging_loki.LokiHandler(
                 url=loki_url,
-                tags={"job": "oden-producer", "buyer": buyer_node_name},
+                tags={"job": job_type, "buyer": node_name},
                 version="1",
             )
             loki_handler.setFormatter(JsonFormatter())
@@ -69,5 +69,5 @@ def setup_logging(buyer_node_name: str) -> logging.LoggerAdapter:
                 "falling back to stdout-only JSON logs for Promtail to scrape."
             )
 
-    base_logger = logging.getLogger("oden.producer")
-    return logging.LoggerAdapter(base_logger, {"buyer": buyer_node_name})
+    base_logger = logging.getLogger(job_type)
+    return logging.LoggerAdapter(base_logger, {"buyer": node_name})

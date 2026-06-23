@@ -36,7 +36,7 @@ setup_kafka() {
     
     # Install Python
     echo "Installing Python..."
-    docker exec "$container" bash -c "DEBIAN_FRONTEND=noninteractive apt update && apt upgrade -y && apt install -y python3 python3-pip && pip3 install --no-cache-dir flask requests redis confluent-kafka python-logging-loki"
+    docker exec "$container" bash -c "DEBIAN_FRONTEND=noninteractive apt update && apt upgrade -y && apt install -y python3 python3-pip && pip3 install --no-cache-dir flask requests redis confluent-kafka python-logging-loki psycopg2-binary"
     pVersion=$(docker exec "$container" python3 --version)
     echo "$pVersion installation complete."
     echo "Copying tx client..."

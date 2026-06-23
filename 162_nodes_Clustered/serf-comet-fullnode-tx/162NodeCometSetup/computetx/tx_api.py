@@ -163,7 +163,7 @@ def get_transaction_scr():
 
 
 BUYER_NAME = get_node_name(BUYER_NODE_JSON)
-logger = logging_setup.setup_logging(BUYER_NAME)
+logger = logging_setup.setup_logging(BUYER_NAME, "oden-producer")
 CLUSTER_ID = cluster_config.get_cluster_id(BUYER_NAME)
 logger.info(f"Buyer node '{BUYER_NAME}' resolved to cluster {CLUSTER_ID}")
 
