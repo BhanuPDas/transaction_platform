@@ -1,5 +1,7 @@
 import math
+import requests
 
+BUYER_URL = "http://localhost:8090"
 RESOURCE_MAP = {
     "vcpu": {"price": "price_per_cpu", "score": "score_per_cpu", "available": "cpu"},
     "ram": {"price": "price_per_ram", "score": "score_per_ram", "available": "ram"},
@@ -91,6 +93,21 @@ def _compute_utility(
         f"=> U={utility:.6f}"
     )
     return utility
+
+def notify_fail_tx_buyer(tx: dict, logger):
+    try:
+        url = f"{BUYER_URL}/fail_tx"
+        payload = {
+            "tx": tx
+        }
+        response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()
+        if response.status_code in (200, 204):
+            logger.info("Tx details sent successfully")
+        else:
+            logger.error(f"Tx details couldn't be sent due to status code: {response.status_code}")
+    except Exception as exc:
+        logger.error(f"Unexpected error: {exc}")
 
 def select_seller(resources: dict, discovery_results: list, logger) -> dict | None:
     """
