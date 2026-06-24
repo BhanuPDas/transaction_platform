@@ -11,6 +11,7 @@ setup_logging()
 
 import db
 import scheduler
+from app import app
 
 logger = logging.getLogger(__name__)
 
