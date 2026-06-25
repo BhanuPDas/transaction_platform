@@ -105,6 +105,7 @@ services:
 
   app:
     build: ./dbupdate/.
+    container_name: dbupdater
     restart: unless-stopped
     depends_on:
       db:
