@@ -136,11 +136,13 @@ def get_transaction_scr():
             logger.error(str(exc))
             payload = build_failed_payload(tx_uuid, buyer_obj, str(exc))
             producer.produce_failed(CLUSTER_ID, tx_uuid, payload)
+            sellers_discovery.notify_fail_tx_buyer(payload, logger)
             return jsonify({"status": "failed", "message": payload["log"], "tx_hash": tx_uuid}), 200
 
         if not sufficient_budget:
             payload = build_failed_payload(tx_uuid, buyer_obj, "Buyer Has Very Low Budget For The Resources")
             producer.produce_failed(CLUSTER_ID, tx_uuid, payload)
+            sellers_discovery.notify_fail_tx_buyer(payload, logger)
             logger.info(f"Failed transaction {tx_uuid} produced to {cluster_config.get_topic(CLUSTER_ID)}")
             return jsonify({"status": "failed", "message": payload["log"], "tx_hash": tx_uuid}), 200
 
