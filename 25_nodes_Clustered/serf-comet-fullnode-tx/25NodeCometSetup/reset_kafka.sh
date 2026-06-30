@@ -25,7 +25,7 @@ reset_kafka() {
     echo "[1] Killing Kafka Tx Producer..."
     tx_pid=$(docker exec "$container" pgrep -f "python3 tx_producer.py")
     if [[ -n "$tx_pid" ]]; then
-      docker exec "$container" kill -9 "$tx_pid"
+      docker exec "$container" kill -9 $tx_pid
       sleep 1
     else
       echo "Python Tx Producer not running"
@@ -34,7 +34,7 @@ reset_kafka() {
     echo "[2] Killing Kafka Tx Consumer..."
     tx_pid=$(docker exec "$container" pgrep -f "python3 tx_consumer.py")
     if [[ -n "$tx_pid" ]]; then
-      docker exec "$container" kill -9 "$tx_pid"
+      docker exec "$container" kill -9 $tx_pid
       sleep 1
     else
       echo "Python Tx Consumer not running"
