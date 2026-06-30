@@ -45,7 +45,7 @@ reset_kafka() {
     docker exec "$container" bash -c "cd /root && rm -rf computetx"
     docker cp "./computetx/." "$container":/root/computetx/ || { echo "Failed to copy py files to $container"; exit 1; }
     if [[ -n "${SELLER_NODES[$k]}" ]]; then
-    docker exec -d "$container" bash -c "cd /root/computetx && nohup python3 tx_consumer.py > /dev/null 2>&1 &"
+      docker exec -d "$container" bash -c "cd /root/computetx && nohup python3 tx_consumer.py > /dev/null 2>&1 &"
     else
       docker exec -d "$container" bash -c "cd /root/computetx && nohup python3 tx_producer.py > /dev/null 2>&1 &"
     fi
