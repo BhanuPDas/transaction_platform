@@ -41,8 +41,8 @@ reset_kafka() {
     fi
 
     echo "[3] Restarting Producers And Consumers..."
-    docker exec "$container" bash -c "DEBIAN_FRONTEND=noninteractive apt update && apt upgrade -y && pip3 install --no-cache-dir confluent-kafka python-logging-loki psycopg2-binary"
-    docker cp "./computetx/." "$container":/root/computetx/ || { echo "Failed to copy py files to $container"; exit 1; }
+#    docker exec "$container" bash -c "DEBIAN_FRONTEND=noninteractive apt update && apt upgrade -y && pip3 install --no-cache-dir confluent-kafka python-logging-loki psycopg2-binary"
+#    docker cp "./computetx/." "$container":/root/computetx/ || { echo "Failed to copy py files to $container"; exit 1; }
     if [[ -n "${SELLER_NODES[$k]}" ]]; then
     docker exec -d "$container" bash -c "cd /root/computetx && nohup python3 tx_consumer.py > /dev/null 2>&1 &"
     else
