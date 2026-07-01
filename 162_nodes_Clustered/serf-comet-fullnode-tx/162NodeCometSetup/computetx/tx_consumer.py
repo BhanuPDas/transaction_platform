@@ -41,7 +41,6 @@ import push_to_redis
 import cluster_config
 import logging_setup
 from db_handler import DBHandler
-import sellers_discovery
 
 NODE_JSON_PATH = os.environ.get("NODE_JSON_PATH", "/opt/serfapp/node.json")
 BOOTSTRAP_SERVERS = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
@@ -167,7 +166,6 @@ class TxConsumer:
             try:
                 if status == "Failed":
                     self._db.persist_failed(event)
-                    sellers_discovery.notify_fail_tx_buyer(event, self.logger)
                 elif status == "OnGoing":
                     self._db.persist_ongoing(event)
                     push_to_redis.publish_ongoing_to_redis(event, logger=self.logger)

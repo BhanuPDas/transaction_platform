@@ -30,7 +30,7 @@ reset_kafka() {
     echo "[1] Killing Kafka Tx Producer..."
     tx_pid=$(docker exec "$container" pgrep -f "python3 tx_producer.py")
     if [[ -n "$tx_pid" ]]; then
-      docker exec "$container" kill -9 "$tx_pid"
+      docker exec "$container" kill -9 $tx_pid
       sleep 1
     else
       echo "Python Tx Producer not running"
@@ -39,17 +39,18 @@ reset_kafka() {
     echo "[2] Killing Kafka Tx Consumer..."
     tx_pid=$(docker exec "$container" pgrep -f "python3 tx_consumer.py")
     if [[ -n "$tx_pid" ]]; then
-      docker exec "$container" kill -9 "$tx_pid"
+      docker exec "$container" kill -9 $tx_pid
       sleep 1
     else
       echo "Python Tx Consumer not running"
     fi
 
     echo "[3] Restarting Producers And Consumers..."
-    docker exec "$container" bash -c "DEBIAN_FRONTEND=noninteractive apt update && apt upgrade -y && pip3 install --no-cache-dir confluent-kafka python-logging-loki psycopg2-binary"
+#    docker exec "$container" bash -c "DEBIAN_FRONTEND=noninteractive apt update && apt upgrade -y && pip3 install --no-cache-dir confluent-kafka python-logging-loki psycopg2-binary"
+    docker exec "$container" bash -c "cd /root && rm -rf computetx"
     docker cp "./computetx/." "$container":/root/computetx/ || { echo "Failed to copy py files to $container"; exit 1; }
     if [[ -n "${SELLER_NODES[$k]}" ]]; then
-    docker exec -d "$container" bash -c "cd /root/computetx && nohup python3 tx_consumer.py > /dev/null 2>&1 &"
+      docker exec -d "$container" bash -c "cd /root/computetx && nohup python3 tx_consumer.py > /dev/null 2>&1 &"
     else
       docker exec -d "$container" bash -c "cd /root/computetx && nohup python3 tx_producer.py > /dev/null 2>&1 &"
     fi
