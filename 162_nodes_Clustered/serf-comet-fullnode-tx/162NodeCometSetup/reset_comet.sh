@@ -94,7 +94,7 @@ reset_cometbft() {
     docker exec "$container" tail -n 20 /root/logs/abci.log
     docker exec "$container" tail -n 20 /root/logs/cometbft.log
     if [[ -n "${SELLER_NODES[$k]}" ]]; then
-    echo "$container is a seller node — skipping"
+      echo "$container is a seller node — skipping"
     else
 #      docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"role\":\"buyer\"}}" http://127.0.0.1:5555/updatetags
       docker exec -d "$container" bash -c "cd /root/cometclient && nohup python3 tx_api.py > /root/logs/tx_api.log 2>&1 &"
