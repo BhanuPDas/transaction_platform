@@ -31,7 +31,7 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
-            "buyer": getattr(record, "buyer", "unknown"),
+            "node": getattr(record, "node", "unknown"),
         }
         if record.exc_info:
             payload["exc_info"] = self.formatException(record.exc_info)
