@@ -33,7 +33,7 @@ def get_tx_messages_only():
             messages = [row["tx_msg"] for row in cur.fetchall()]
 
         logger.info(
-            "GET /tx_history/messages",
+            "GET /tx_history",
             extra={"row_count": len(messages), "elapsed_ms": round((time.monotonic() - start) * 1000, 1)},
         )
         return jsonify({"count": len(messages), "tx_msg": messages}), 200

@@ -19,8 +19,8 @@ DB_NAME = os.environ.get("DB_NAME", "oden")
 DB_USER = os.environ.get("DB_USER", "oden")
 DB_PASSWORD = os.environ.get("DB_PASSWORD", "changeme")
 
-DB_POOL_MIN_CONN = int(os.environ.get("DB_POOL_MIN_CONN", "1"))
-DB_POOL_MAX_CONN = int(os.environ.get("DB_POOL_MAX_CONN", "5"))
+DB_POOL_MIN_CONN = int(os.environ.get("DB_POOL_MIN_CONN", "5"))
+DB_POOL_MAX_CONN = int(os.environ.get("DB_POOL_MAX_CONN", "10"))
 
 _connection_pool = None
 
