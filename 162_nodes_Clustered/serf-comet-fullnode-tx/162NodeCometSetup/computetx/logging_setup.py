@@ -57,7 +57,7 @@ def setup_logging(node_name: str, job_type: str) -> logging.LoggerAdapter:
         try:
             loki_handler = logging_loki.LokiHandler(
                 url=loki_url,
-                tags={"job": job_type, "buyer": node_name},
+                tags={"job": job_type, "node": node_name},
                 version="1",
             )
             loki_handler.setFormatter(JsonFormatter())
@@ -69,4 +69,4 @@ def setup_logging(node_name: str, job_type: str) -> logging.LoggerAdapter:
             )
 
     base_logger = logging.getLogger(job_type)
-    return logging.LoggerAdapter(base_logger, {"buyer": node_name})
+    return logging.LoggerAdapter(base_logger, {"node": node_name})
