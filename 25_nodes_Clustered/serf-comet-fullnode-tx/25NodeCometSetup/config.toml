@@ -472,7 +472,7 @@ timeout_commit = "0s"
 double_sign_check_height = 0
 
 # EmptyBlocks mode and possible interval between empty blocks
-create_empty_blocks = true
+create_empty_blocks = false
 create_empty_blocks_interval = "0s"
 
 # Reactor sleep duration parameters
