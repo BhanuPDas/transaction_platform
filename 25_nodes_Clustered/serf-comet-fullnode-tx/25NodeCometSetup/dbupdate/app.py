@@ -25,11 +25,18 @@ def health():
 
 @app.route("/tx_history", methods=["GET"])
 def get_tx_messages_only():
-    """Return only the tx_msg column values, as a list."""
+    """Return only tx_msg values for the latest 2000 records by tx_end_unix."""
     start = time.monotonic()
     try:
         with db.get_cursor(dict_cursor=True) as cur:
-            cur.execute("SELECT tx_msg FROM public.tx_history ORDER BY id;")
+            cur.execute(
+                """
+                SELECT tx_msg
+                FROM public.tx_history
+                ORDER BY tx_end_unix DESC
+                LIMIT 2000;
+                """
+            )
             messages = [row["tx_msg"] for row in cur.fetchall()]
 
         logger.info(
