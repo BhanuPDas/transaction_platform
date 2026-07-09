@@ -25,11 +25,20 @@ def health():
 
 @app.route("/tx_history", methods=["GET"])
 def get_tx_messages_only():
-    """Return only the tx_msg column values, as a list."""
+    """Return only tx_msg values for records ending in the last 15 minutes."""
     start = time.monotonic()
+    cutoff_unix = int(time.time()) - 15 * 60
     try:
         with db.get_cursor(dict_cursor=True) as cur:
-            cur.execute("SELECT tx_msg FROM public.tx_history ORDER BY id;")
+            cur.execute(
+                """
+                SELECT tx_msg
+                FROM public.tx_history
+                WHERE tx_end_unix >= %s
+                ORDER BY id;
+                """,
+                (cutoff_unix,),
+            )
             messages = [row["tx_msg"] for row in cur.fetchall()]
 
         logger.info(
@@ -37,7 +46,6 @@ def get_tx_messages_only():
             extra={"row_count": len(messages), "elapsed_ms": round((time.monotonic() - start) * 1000, 1)},
         )
         return jsonify({"count": len(messages), "tx_msg": messages}), 200
-
     except Exception as e:
         logger.exception("Failed to fetch tx_msg column")
         return jsonify({"error": "failed to fetch tx_msg", "detail": str(e)}), 500
