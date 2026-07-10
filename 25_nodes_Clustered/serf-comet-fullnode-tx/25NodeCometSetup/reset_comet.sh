@@ -81,6 +81,7 @@ reset_cometbft() {
     docker exec "$container" tail -n 20 /root/logs/abci.log
     docker exec "$container" tail -n 20 /root/logs/cometbft.log
     if (( i != 0 && i != 4 && i != 12 && i != 13 && i != 14 )); then
+      docker exec "$container" curl -i -X POST -H "Content-Type: application/json" -d "{\"tags\":{\"role\":\"buyer\"}}" http://127.0.0.1:5555/updatetags
       docker exec -d "$container" bash -c "cd /root/cometclient && nohup python3 tx_api.py > /root/logs/tx_api.log 2>&1 &"
     fi
     echo "✔ Done with $container"
