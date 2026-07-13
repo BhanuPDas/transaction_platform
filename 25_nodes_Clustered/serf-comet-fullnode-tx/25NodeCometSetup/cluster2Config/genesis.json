@@ -31,37 +31,37 @@
   },
   "validators": [
     {
-      "address": "4C35233AA055C396D05C378154EE2DC5DDC1E98C",
+      "address": "E2A21ED5E88B0541A8606DEF6561FD1752A07011",
       "pub_key": {
         "type": "tendermint/PubKeyEd25519",
-        "value": "gedWTMfFHlW8xJ5hDQQ3g0LKdNv0O03DrLWhs6HJVzg="
+        "value": "quoS0yw/6p3WxnrVFCUDmQ7lBn6dYkf9KSDWZla1lGE="
       },
       "power": "50",
       "name": "serf22"
     },
     {
-      "address": "2E25943F8FC32CEDBC58975F85CC34419D8B3C15",
+      "address": "81B94A78C51D32D97B3064EB48E95F489606820C",
       "pub_key": {
         "type": "tendermint/PubKeyEd25519",
-        "value": "ZgkOrMTpK0kyoBHVsEeYEZuD3vrApF9JAXEEe49EzhY="
+        "value": "HSlXSIvjMEjM2SZhWBPT4PSNq3K4UTirSLj0GpYYmrk="
       },
       "power": "50",
       "name": "serf23"
     },
     {
-      "address": "EF1BF24FD0411C90B8B331DAF2995DFE4E44EACE",
+      "address": "D4003EFCBA1530E656279E60411BBFFC6D8437E8",
       "pub_key": {
         "type": "tendermint/PubKeyEd25519",
-        "value": "N/MmZW4MpN2eyp3NJ7f3VsRuWmkOQySmFdOLV2ngUuE="
+        "value": "ylS2e9zxZvDloPIah/+AEWHA4dup94EuUoO4/R4+mbU="
       },
       "power": "50",
       "name": "serf24"
     },
     {
-      "address": "B0E4E03E75899E22C2E688167A30988BBD3E0D3A",
+      "address": "95EDA661672588CEF5FBFC4026B3CE3CE047F724",
       "pub_key": {
         "type": "tendermint/PubKeyEd25519",
-        "value": "VvLl71rvsvocTLKXkQuZK+M8/C8zKJkfbVZf+ZAPcN8="
+        "value": "poehDAXNMdRlDHXPZRAYwoq0bqW5KlNhLFguWAyDj9Y="
       },
       "power": "50",
       "name": "serf25"
