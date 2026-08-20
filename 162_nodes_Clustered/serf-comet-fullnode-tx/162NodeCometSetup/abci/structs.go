@@ -36,6 +36,7 @@ type BuyerResources struct {
 }
 type BuyerInfo struct {
 	Name      string         `json:"name"`
+	AppType   string         `json:"app_type"`
 	IP        string         `json:"ip"`
 	Resources BuyerResources `json:"resource"`
 }

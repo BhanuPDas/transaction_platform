@@ -90,6 +90,7 @@ def get_transaction_scr():
             return jsonify({"error": "Invalid request received"}), 400
 
         demand_output = data["Demand_output"]
+        app_type = demand_output.get("app_type")
         ip = demand_output.get("ip")
         lease_duration = demand_output.get("lease_duration")
         resources = demand_output.get("resources")
@@ -107,7 +108,7 @@ def get_transaction_scr():
 
         tx_uuid = str(uuid.uuid4())
         tx_start_ts = datetime.now(timezone.utc).isoformat()
-        buyer_obj = {"name": BUYER_NAME, "ip": ip, "resource": resources}
+        buyer_obj = {"name": BUYER_NAME,"app_type": app_type, "ip": ip, "resource": resources}
 
         discovered = data.get("Hilbert_output", {})
         seller_rec = None

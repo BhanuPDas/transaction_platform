@@ -154,6 +154,7 @@ def get_transaction_scr():
             logger.info("Empty or malformed JSON received")
             return jsonify({"error": "Invalid request received"}), 400
         demand_output = data.get("Demand_output")
+        app_type = demand_output.get("app_type")
         ip = demand_output.get("ip")
         lease_duration = demand_output.get("lease_duration")
         resources = demand_output.get("resources")
@@ -195,6 +196,7 @@ def get_transaction_scr():
             logger.info("Preparing payload for transaction...")
         buyer_obj = {
             "name": buyer,
+            "app_type": app_type,
             "ip": ip,
             "resource": resources
         }
